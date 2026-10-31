@@ -1,0 +1,40 @@
+# Python
+bridge/.venv/
+__pycache__/
+.ruff_cache/
+
+# 运行时数据：日志、额度缓存
+bridge/state/
+
+# 录屏输出、出厂固件备份（体积大）
+recordings/
+backup/
+
+.DS_Store
+
+# arduino-cli 编译输出
+agent_buddy/build/
+
+# 外壳建模的 Python 环境
+case/.venv/
+case/__pycache__/
+case/*.zip
+# 打印包解压出来的副本（和 case/stl 重复）
+case/给朋友打印/
+case/帮我打印一个外壳/
+case/*.blend1
+/Agent-Buddy-外壳-打印包.zip
+
+# 宣传片：只提交脚本和定稿封面；渲染帧、成片、配乐都能用脚本重新生成
+promo/render/
+promo/tex/
+promo/*.mp4
+promo/*.wav
+promo/*.log
+promo/cover-60s.png
+# 打码前的原始录屏和软件截图（有邮箱、对话列表）
+promo/screens/
+promo/apps/
+# Mixkit 配乐（授权不允许单独分发曲目）、商家商品图
+promo/music/
+promo/parts/

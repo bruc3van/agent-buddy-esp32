@@ -1,0 +1,4 @@
+#!/bin/sh
+# Agent Buddy 管理工具：bridge/buddy status | start | stop | restart | logs | flash | autostart on|off …（见 buddy.py）
+D="$(cd "$(dirname "$0")" && pwd)"
+exec "$D/.venv/bin/python" "$D/buddy.py" "$@"

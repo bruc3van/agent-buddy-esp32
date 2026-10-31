@@ -1,0 +1,32 @@
+{
+  "version": "v4.1.1",
+  "chip": "esp32s3",
+  "fqbn": "esp32:esp32:esp32s3:PSRAM=opi,FlashSize=4M,CDCOnBoot=cdc,USBMode=hwcdc,PartitionScheme=huge_app",
+  "core": "esp32:esp32@3.3.12",
+  "libs": [
+    "GFX Library for Arduino@1.6.9",
+    "U8g2@2.36.19",
+    "TAMC_GT911@1.0.2",
+    "ArduinoJson@7.4.3"
+  ],
+  "built": "2026-10-31T21:48:20+08:00",
+  "commit": "23f1dfc",
+  "parts": [
+    [
+      "0x0",
+      "bootloader.bin"
+    ],
+    [
+      "0x8000",
+      "partitions.bin"
+    ],
+    [
+      "0xe000",
+      "boot_app0.bin"
+    ],
+    [
+      "0x10000",
+      "app.bin"
+    ]
+  ]
+}
