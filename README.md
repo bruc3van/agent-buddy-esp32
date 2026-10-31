@@ -45,9 +45,13 @@
 
 像素风小电视造型，全卡扣，不用螺丝、不用胶。同一套 STL，换耗材颜色就是两套配色：
 
-| 经典黑灰 | 米白 × Claude 橙 |
-|:---:|:---:|
-| <img src="case/preview/theme-classic.png" width="400"><br>前框、支架黑色，机身、后盖深灰 | <img src="case/preview/theme-cream.png" width="400"><br>前框、后盖、支架米白，机身 Claude 橙（[三视图](case/preview/theme-cream-views.png)） |
+**经典黑灰**：前框、支架黑色，机身、后盖深灰
+
+<img src="case/preview/theme-classic.png" alt="经典黑灰外壳三视图">
+
+**米白 × Claude 橙**：前框、后盖、支架米白，机身 Claude 橙
+
+<img src="case/preview/theme-cream.png" alt="米白 × Claude 橙外壳三视图">
 
 ## 选购清单
 

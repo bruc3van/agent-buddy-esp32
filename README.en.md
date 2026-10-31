@@ -47,9 +47,13 @@ Captured directly from the board (480×272, scaled 2×).
 
 A pixel-style mini TV, fully snap-fit: no screws, no glue. The same STL files give two color schemes, just swap filaments:
 
-| Classic black & grey | Cream × Claude orange |
-|:---:|:---:|
-| <img src="case/preview/theme-classic.png" width="400"><br>Black bezel and stand, dark-grey body and back | <img src="case/preview/theme-cream.png" width="400"><br>Cream bezel, back and stand, Claude-orange body ([three views](case/preview/theme-cream-views.png)) |
+**Classic black & grey**: black bezel and stand, dark-grey body and back
+
+<img src="case/preview/theme-classic.png" alt="Classic black and grey case, three views">
+
+**Cream × Claude orange**: cream bezel, back and stand, Claude-orange body
+
+<img src="case/preview/theme-cream.png" alt="Cream and Claude orange case, three views">
 
 ## Bill of materials
 
