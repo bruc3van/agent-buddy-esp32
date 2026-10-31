@@ -109,11 +109,23 @@ setup 会依次完成：建 Python 环境 → 注册 Claude Code / Codex / DeepS
 
 ## 工作原理
 
-```
-Claude Code ─hooks / statusline─┐
-Codex ──────hooks───────────────┤
-DeepSeek Harness ─hooks─────────┼─▶ bridge（电脑上，127.0.0.1:47823）══ USB 或 Wi-Fi ══▶ ESP32-S3 屏幕
-magpie 本地网关 ◀──只读────────┘     汇总各会话状态、额度、用量                           动画 / 额度 / 面板
+```mermaid
+flowchart LR
+    subgraph PC["你的电脑"]
+        CC["Claude Code"]
+        CX["Codex"]
+        DS["DeepSeek Harness"]
+        MG["magpie 本地网关"]
+        BR["bridge（127.0.0.1:47823）<br/>汇总各会话状态、额度、用量"]
+        CC -- "hooks / statusline" --> BR
+        CX -- hooks --> BR
+        DS -- hooks --> BR
+        MG -. 只读 .-> BR
+    end
+    subgraph DEV["ESP32-S3 屏幕"]
+        FW["固件<br/>动画 / 额度 / magpie 面板"]
+    end
+    BR == "USB 或 Wi-Fi（加密）" ==> FW
 ```
 
 - **bridge**（`bridge/agent_bridge.py`）跑在你的电脑上：接收 Claude Code / Codex / DeepSeek Harness 的 hooks 事件和 statusline 额度，读取 magpie 本地网关的只读接口，汇总后发给板子。它只监听本机，不读取任何登录凭证；唯一的例外是你主动给了 DeepSeek API Key 时，用它查一下账户余额。

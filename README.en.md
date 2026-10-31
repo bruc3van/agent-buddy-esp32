@@ -111,11 +111,23 @@ Join a network under Settings → Wi-Fi on the board. Starting the bridge with U
 
 ## How it works
 
-```
-Claude Code ─hooks / statusline─┐
-Codex ──────hooks───────────────┤
-DeepSeek Harness ─hooks─────────┼─▶ bridge (on your computer, 127.0.0.1:47823) ══ USB or Wi-Fi ══▶ ESP32-S3 display
-magpie local gateway ◀─read-only┘     merges session state, quota, usage                          animations / quota / panels
+```mermaid
+flowchart LR
+    subgraph PC["Your computer"]
+        CC["Claude Code"]
+        CX["Codex"]
+        DS["DeepSeek Harness"]
+        MG["magpie local gateway"]
+        BR["bridge (127.0.0.1:47823)<br/>merges session state, quota, usage"]
+        CC -- "hooks / statusline" --> BR
+        CX -- hooks --> BR
+        DS -- hooks --> BR
+        MG -. read-only .-> BR
+    end
+    subgraph DEV["ESP32-S3 display"]
+        FW["firmware<br/>animations / quota / magpie panels"]
+    end
+    BR == "USB or Wi-Fi (encrypted)" ==> FW
 ```
 
 - The **bridge** (`bridge/agent_bridge.py`) runs on your computer. It receives Claude Code / Codex / DeepSeek Harness hook events and statusline quota, reads magpie's read-only local API, and sends the result to the board. It only listens on localhost and never reads any login credentials; the one exception is a DeepSeek API key you choose to provide, which it uses only to look up your account balance.
