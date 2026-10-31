@@ -66,7 +66,7 @@ These are the exact parts the author bought. Prices are what was paid on Pinduod
 | Adapter cables | `MX1.25 4P to Dupont` | 20cm, pack of 5 | ¥10.56 | P1 / P3 / P4 | Turn the board's 1.25mm ports into Dupont headers for the mic and radar |
 | Dupont wires | `Dupont wire 20cm` | Male-to-male, strip of 10 | ¥2.47 | — | Join the radar kit cable (female) to the adapter cable (female) |
 
-Optional parts total about **¥76** (≈ US$11); with the board, the full set is about **¥175** (≈ US$25). The case can be 3D-printed: about 67 g of black and 113 g of dark-grey PLA; STL files are in [`case/stl/`](case/stl).
+Optional parts total about **¥76** (≈ US$11); with the board, the full set is about **¥175** (≈ US$25). The case can be 3D-printed: about 58 g of black and 104 g of dark-grey PLA; STL files are in [`case/stl/`](case/stl).
 
 Notes:
 - **Check the battery polarity before plugging it in** — some sellers wire red / black the opposite way from the board's BAT port. Press **SW1** on the board once to power on.

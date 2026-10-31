@@ -19,15 +19,20 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 # ---------------- 尺寸（改这里）----------------
 BOARD_W, BOARD_H = 120.0, 70.0      # 板子外形（含安装耳）
 HOLE_DX, HOLE_DY = 113.0, 62.0      # 安装孔中心距：短边方向按实物照片从 60 改 62（第一版打出来窄了），前框定位销插这四个孔
-GLASS_W, GLASS_H = 105.8, 67.6      # 屏幕玻璃：按第一版装好后开窗的缝反推（左/上/下各约 1mm、右边贴紧），和黑边 8+54+6=68 取中间
-GLASS_DX = 0.4                      # 玻璃中心相对安装孔中心往右偏多少（同上，按缝反推）
+GLASS_W, GLASS_H = 105.0, 66.0      # 屏幕玻璃（实测）
+GLASS_DX = 0.4                      # 玻璃中心相对安装孔中心往右偏多少（按第一版装好后开窗的缝反推）
 GLASS_DY = -0.5                     # 玻璃中心相对安装孔中心往上偏多少：按尺寸图量，装好的方向（SW1 在下沿）玻璃偏下 0.5
-GLASS_GAP = 0.3                     # 前框开窗比玻璃每边大这么多：玻璃从开窗里露出来，和前框正面齐平，触摸不凹进去
-BLACK_TOP, BLACK_BOT = 8.0, 6.0     # 玻璃上下黑边（实测）：显示区比玻璃中心低 (8-6)/2 = 1mm
-STANDOFF = 6.0                      # PCB 安装耳正面到玻璃正面的距离（玻璃+屏幕厚度，量的 6mm；装上后玻璃略凹，实际应该小一点）
-FRONT_T = 2.0                       # 前框厚度：3 时玻璃略凹进前框，从正面削薄 1mm
-POST_L = 3.0                        # 前框柱子长（前框背面到 PCB 正面）：和第一版实物一样，弹簧顶紧量不变
-PCB_Z = -FRONT_T - POST_L           # PCB 正面的 z（前框正面 z=0）；按 STANDOFF 算玻璃凸出前框 STANDOFF - FRONT_T - POST_L
+BLACK_TOP, BLACK_BOT, BLACK_SIDE = 8.0, 4.0, 4.0   # 玻璃上 / 下 / 左右黑边（实测）：显示区 97 × 54，比玻璃中心低 (8-4)/2 = 2mm
+VIEW_MARGIN = 2.0                   # 前框开窗比显示区每边大这么多：盖住玻璃边和不对称的黑边，露出一圈均匀的 2mm 黑边
+WIN_CHAMFER = 0.5                   # 开窗正面倒角：点屏幕边上的按钮时手指不被台阶挡住
+SKIN = 1.0                          # 盖在玻璃上的那层前框厚度 = 屏幕凹进去多少
+POCKET_GAP = 0.6                    # 前框背面放玻璃的凹槽比玻璃每边大这么多（玻璃位置有偏差也放得进）
+FPC_TOP = 2.5                       # 凹槽在玻璃上沿再往上让出这么多：屏幕排线从上沿凸出约 2mm
+STANDOFF = 5.0                      # PCB 安装耳正面到玻璃正面的距离（实测）
+GLASS_FIT = 0.1                     # 玻璃正面和凹槽底（前框面皮背面）之间的间隙：夹紧力都走柱子，玻璃不受压
+FRONT_T = 2.0                       # 前框厚度（玻璃外面一圈）；盖住玻璃的地方只剩 SKIN
+PCB_Z = -(SKIN + GLASS_FIT + STANDOFF)   # PCB 正面的 z（前框正面 z=0）：玻璃正面正好顶到凹槽底下 GLASS_FIT
+POST_L = -PCB_Z - FRONT_T           # 前框柱子长（前框背面到 PCB 正面）
 PCB_T = 1.6                         # PCB 厚度：机身托台顶在 PCB 背面，和前框柱子一起把板子夹住
 PRELOAD = 0.2                       # 弹簧托台预压：凸台比 PCB 背面往前多出这么多，装好后横梁被压弯、把板子顶紧
 SPRING_T = 1.0                      # 弹簧托台横梁厚度（越厚越硬）
@@ -42,7 +47,7 @@ STEP = 2.0                          # 像素台阶圆角的台阶大小：4 时�
 LEAD = 0.6                          # 导向倒角：机身两个开口内沿、唇边尖端各倒 45°（也吃掉机身后口贴热床那层的“象脚”）
 
 EDGE_TOP, EDGE_BOT = 4.0, 5.0       # 板子上沿 / 下沿到内壁至少留多少（按实物装好后的空间，插头和线够用）
-SCREEN_CY = (BLACK_TOP - BLACK_BOT) / 2 - GLASS_DY   # 板子中心比机身中心高这么多：让显示区（不是玻璃）落在前脸正中
+SCREEN_CY = (BLACK_TOP - BLACK_BOT) / 2 - GLASS_DY   # 板子中心比机身中心高这么多：让显示区（也就是开窗）落在前脸正中
 IN_W = BOARD_W + 4                  # 机身内腔：左右各留 2mm（USB 插头够得着）
 IN_H = 2 * max(BOARD_H / 2 + SCREEN_CY + EDGE_TOP, BOARD_H / 2 - SCREEN_CY + EDGE_BOT)   # 机身上下对称，取上下两边要求大的那个
 OUT_W, OUT_H = IN_W + 2 * WALL, IN_H + 2 * WALL   # 130 × 90
@@ -52,14 +57,16 @@ HOOK_B = 1.4                        # 卡扣倒钩凸出量：咬进窗口 HOOK_
 BARB_L, BARB_LAND = 4.0, 1.2        # 倒钩底座长、卡面后面的平台宽（以前 3 / 0.6，太薄，FDM 打出来直角一圆就咬不住）
 HOOK_X_BOT = 9.0                    # 下沿两个卡扣离中心：避开板子下沿 Speak(x≈+20)、BAT(x≈+43) 插座和 SW1(x≈-24)
 HOOK_X_TOP = 46.0                   # 上沿两个卡扣离中心：避开上沿 P2～P5 插座和线（x≈-8～+39）
+HOOK_X_BOT_BACK, HOOK_X_TOP_BACK = 21.0, 34.0   # 后盖的卡扣和前框错开：机身短了，两边悬臂各 18mm，放在同一个 x 上会撞
 SNAP_SLACK = 0.1                    # 倒钩卡面到窗口边的余量（前后方向）：以前 0.2，正好把弹簧托台 0.2 的预压全吃掉，板子没被顶紧、后盖也晃
-DEPTH = 45.0                        # 机身深度（不含前框、后盖）
+DEPTH = 35.0                        # 机身深度（不含前框、后盖）：45 时太厚，支架底板不变、机身减 10mm
 BACK_T = 3.0
 
 USB_FROM_TOP = 39.0                 # USB-C 中心离板子上沿
 USB_W, USB_H = 16.0, 12.0           # 侧面开口（插头外壳约 10mm 厚，留余量）
 P1_FROM_TOP = 21.0                  # 侧面开口往上加高到离板子上沿这么远，把 USB 旁边的 P1 也包进去（雷达线从侧面出）
 SIDE_DY = -10.0                     # 侧面开口整体上下挪：按实物往下挪 10mm
+SIDE_BOT_UP = 4.0                   # 侧面开口下沿再往上收这么多：按实物下方空得太多
 
 TILT = 15.0                         # 整机后仰角度
 
@@ -80,7 +87,8 @@ MIC_CLIP_B = 0.3                    # 麦克风圆环小、硬，卡点凸出少
 MIC_D = 14.3                        # INMP441 小圆板：实测直径 14mm，圆环内径每边留 0.15
 MIC_H = 6.0                         # 圆环高度（从侧壁往里伸出多少）
 MIC_T = 1.6                         # 麦克风板厚度：圆环内侧的卡点卡在这个高度
-MIC_Y, MIC_Z = 0.0, -28.0           # 麦克风在机身左侧内壁的位置
+MIC_Y = 0.0                         # 麦克风在机身左侧内壁的位置；前后（MIC_Z）放在 PCB 背面和后盖唇边正中间，见下
+MIC_Z = (PCB_Z - PCB_T + (-FRONT_T - DEPTH + LIP_D)) / 2   # 前后放在 PCB 背面和后盖唇边正中间
 
 
 # ---------------- 工具 ----------------
@@ -158,16 +166,6 @@ def clip(w, zc, ramp, b=CLIP_B):
     return hull([(x, y, z) for x in (-w / 2, w / 2) for y, z in ((-0.3, zc), (b, zc), (-0.3, zc + ramp))])
 
 
-def teardrop(d, h, tip, extra=(), seg=48):
-    """泪滴形柱（局部坐标）：直径 d 的圆沿 +Z 拉伸 h，在 ±X 方向（tip=+1/-1）多一个 45° 尖角；extra 是另外要包进去的 (x, y) 点。
-    横着打印的圆孔/圆柱用这个，尖角朝上（孔）或朝下（柱外圈）就不会悬空"""
-    r = d / 2
-    pts = [(r * math.cos(2 * math.pi * k / seg), r * math.sin(2 * math.pi * k / seg)) for k in range(seg)]
-    pts.append((tip * r * math.sqrt(2), 0))
-    pts += list(extra)
-    return hull([(x, y, z) for x, y in pts for z in (0, h)])
-
-
 def holes_xy():
     for sx in (-1, 1):
         for sy in (-1, 1):
@@ -213,7 +211,7 @@ def snaps(z_root, sign):
     返回 (要加的, 唇边上要切掉的缝)"""
     add, cut = Manifold(), Manifold()
     y_in = IN_H / 2 - LIP_TOL
-    for x, sy in hook_spots():
+    for x, sy in hook_spots(sign):
         h = hook() if sy > 0 else hook().mirror([0, 1, 0])   # 倒钩朝外（上沿朝上、下沿朝下）
         if sign < 0:
             h = h.mirror([0, 0, 1])
@@ -222,11 +220,12 @@ def snaps(z_root, sign):
     return add, cut
 
 
-def hook_spots():
-    """四个卡扣的位置 (x, 上沿 +1 / 下沿 -1)"""
+def hook_spots(sign):
+    """四个卡扣的位置 (x, 上沿 +1 / 下沿 -1)；sign 同 snaps()：前框 -1、后盖 +1"""
+    bot, top = (HOOK_X_BOT, HOOK_X_TOP) if sign < 0 else (HOOK_X_BOT_BACK, HOOK_X_TOP_BACK)
     for sx in (-1, 1):
-        yield sx * HOOK_X_BOT, -1
-        yield sx * HOOK_X_TOP, 1
+        yield sx * bot, -1
+        yield sx * top, 1
 
 
 def snap_holes(z_root, sign):
@@ -235,7 +234,7 @@ def snap_holes(z_root, sign):
     tip = z_root + sign * HOOK_L                   # 卡扣尖端
     catch = z_root + sign * (HOOK_L - BARB_L)      # 倒钩卡面
     z0, z1 = sorted((tip + sign * 0.3, catch - sign * SNAP_SLACK))
-    for x, sy in hook_spots():
+    for x, sy in hook_spots(sign):
         m += box(x, sy * (IN_H / 2 + WALL / 2), (z0 + z1) / 2, HOOK_W + 0.6, WALL + 2, z1 - z0)
     return m
 
@@ -243,15 +242,23 @@ def snap_holes(z_root, sign):
 def side_open_y():
     """机身右侧开口（USB-C + P1）的上下沿 y"""
     board_top = SCREEN_CY + BOARD_H / 2
-    return board_top - USB_FROM_TOP - USB_H / 2 + SIDE_DY, board_top - P1_FROM_TOP + SIDE_DY
+    return board_top - USB_FROM_TOP - USB_H / 2 + SIDE_DY + SIDE_BOT_UP, board_top - P1_FROM_TOP + SIDE_DY
 
 
 def bezel():
-    """前框（黑）：开窗、背面 4 根柱子（端面压住 PCB 安装孔周围，中间避让孔让开机身上的定位销）、插进机身的唇边和卡扣、下巴上的凹刻字"""
+    """前框（黑）：开窗压住玻璃四边、背面放玻璃的凹槽、4 根柱子（端面压住 PCB 安装孔周围，中间避让孔让开机身上的定位销）、
+    插进机身的唇边和卡扣、下巴上的凹刻字"""
     t = FRONT_T
     m = slab(stepped(OUT_W, OUT_H), -t, 0)
     gy = SCREEN_CY + GLASS_DY                                               # 玻璃中心
-    m -= box(GLASS_DX, gy, -t / 2, GLASS_W + 2 * GLASS_GAP, GLASS_H + 2 * GLASS_GAP, t + 2)   # 开窗：玻璃整块露出来、和正面齐平
+    # 开窗：以显示区为中心，比显示区每边大 VIEW_MARGIN，正面倒角
+    win_w = GLASS_W - 2 * BLACK_SIDE + 2 * VIEW_MARGIN
+    win_h = GLASS_H - BLACK_TOP - BLACK_BOT + 2 * VIEW_MARGIN
+    win = CrossSection.square([win_w, win_h], True).translate([GLASS_DX, gy + (BLACK_BOT - BLACK_TOP) / 2])
+    m -= slab(win, -t - 1, 1) + chamfer_ring(win, 0.01, -1, WIN_CHAMFER)
+    # 背面凹槽：玻璃嵌进去，正面只隔一层 SKIN；上沿多让出排线
+    m -= box(GLASS_DX, gy, (-t - 1 - SKIN) / 2, GLASS_W + 2 * POCKET_GAP, GLASS_H + 2 * POCKET_GAP, t + 1 - SKIN)
+    m -= box(GLASS_DX, gy + GLASS_H / 2 + FPC_TOP / 2, (-t - 1 - SKIN) / 2, GLASS_W, FPC_TOP + 2 * POCKET_GAP, t + 1 - SKIN)
     for x, y in holes_xy():
         m += cyl(x, y, PCB_Z, -t, POST_D) - cyl(x, y, PCB_Z - 1, PCB_Z + PIN_HOLE_H, PIN_HOLE_D, 24)
     add, cut = snaps(-t, -1)
@@ -260,8 +267,8 @@ def bezel():
     m -= box(IN_W / 2 - 1, (y0 + y1) / 2, -t - LIP_D / 2, 4, y1 - y0, LIP_D + 0.02)   # 唇边让开侧面开口，粗插头不会顶到
     # 唇边尾部让开板子：板子贴得离前框很近，左右两侧唇边会碰到板边，在板子范围里削掉（上下沿和卡扣不受影响）
     m -= box(0, SCREEN_CY, PCB_Z - 10, BOARD_W + 0.6, BOARD_H + 0.6, 20)
-    chin_y = (-OUT_H / 2 + gy - GLASS_H / 2 - GLASS_GAP) / 2           # 开窗下沿和前框下边的正中间
-    txt, tw, th = pixel_text('@bruc3van')
+    chin_y = (-OUT_H / 2 - win_h / 2) / 2                            # 开窗下沿和前框下边的正中间（开窗以机身中心为中心）
+    txt, tw, th = pixel_text('Agent Buddy')
     m -= txt.translate([0, chin_y, 0])
     return m
 
@@ -311,12 +318,11 @@ def body():
         # 朝后口那面（打印时朝下）做成 45° 斜面贴回墙上，不然是 11×6mm 的水平悬空
         m += hull([(sx * LEG_X + dx, y, z) for dx in (-sw / 2, sw / 2) for y, z in
                    ((yw, zm + sw / 2), (yt, zm + sw / 2), (yt, zm - sw / 2), (yw, zm - sw / 2 - (yt - yw)))])
-    # 麦克风座：左侧内壁一圈完整圆环，INMP441 收音孔朝外，线从圆环朝机身里的口出来；外面一圈像素圆形收音孔，和圆环同心。
-    # 机身竖着打印，圆环是横着伸出侧壁的：外圈底部、内孔顶部都做成 45° 尖角（泪滴形），不悬空，孔顶不塌、板子插得进
-    # 外圈两头都有尖角：底下的尖角免得外圈悬空，顶上的尖角包住内孔的尖顶（不然内孔尖顶会把圆环顶上切穿，成了 C 形）
-    roof = (MIC_D / 2 + 1.5) * math.sqrt(2)
-    ring = teardrop(MIC_D + 3, MIC_H, 1, extra=[(-roof, 0)]) - teardrop(MIC_D, MIC_H + 2, -1).translate([0, 0, -1])   # 局部 +X 转过去是往后（打印时朝下）
-    for a in (0, 120, 240):  # 三个卡点，避开孔顶的尖角（180°）；板子按进圆环就扣住，不用胶
+    # 麦克风座：左侧内壁一圈纯圆的圆环，INMP441 收音孔朝外，线从圆环朝机身里的口出来；外面一圈像素圆形收音孔，和圆环同心。
+    # 机身竖着打印，圆环横着伸出侧壁：外圈底部和内孔顶部是小悬空，FDM 能直接打，孔顶可能略塌，板子按不进去就把孔顶刮一下
+    ring = (Manifold.cylinder(MIC_H, MIC_D / 2 + 1.5, MIC_D / 2 + 1.5, 64)
+            - Manifold.cylinder(MIC_H + 2, MIC_D / 2, MIC_D / 2, 64).translate([0, 0, -1]))
+    for a in (0, 120, 240):  # 三个卡点；板子按进圆环就扣住，不用胶
         ring += clip(3, MIC_T + 0.1, MIC_H - MIC_T - 0.1, MIC_CLIP_B).translate([0, -MIC_D / 2, 0]).rotate([0, 0, a + 90])
     m += ring.rotate([0, 90, 0]).translate([-IN_W / 2, MIC_Y, MIC_Z])
     for i in range(-3, 4):          # 方孔排成像素圆，最外一圈比圆环内壁小 1mm 左右
@@ -515,7 +521,7 @@ def main():
     write_stl(on_bed(st, (90, 0, 0)), stl('4-支架-黑.stl'))            # 底板朝下（装配坐标里底板是水平的 XZ 面）
 
     # 组装预览：在机身坐标系里摆好，再整体后仰
-    screen = box(0, SCREEN_CY + GLASS_DY, -0.3, GLASS_W, GLASS_H, 0.6)  # 预览用：屏幕玻璃
+    screen = box(GLASS_DX, SCREEN_CY + GLASS_DY, -SKIN - GLASS_FIT - 0.3, GLASS_W, GLASS_H, 0.6)  # 预览用：屏幕玻璃
     asm = [(bz, BLACK), (bd, DARK), (bk, DARK), (screen, (30, 60, 90))]
     asm = [(m.rotate([-TILT, 0, 0]), c) for m, c in asm] + [(st, BLACK)]
     render(asm, os.path.join(HERE, 'preview', 'assembly-front.png'), view=(-12, 28))
