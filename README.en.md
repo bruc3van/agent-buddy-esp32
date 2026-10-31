@@ -39,10 +39,17 @@ Captured directly from the board (480×272, scaled 2×).
 
 ## Photos
 
-| | |
+| | | |
+|:---:|:---:|:---:|
+| <img src="docs/images/photo-screen.jpg" width="280"><br>The magpie Agents page on the real screen (early light theme) | <img src="docs/images/photo-back.jpg" width="280"><br>Back of the board: ESP32-S3 module, external antenna, 2030 speaker on the Speak port | <img src="docs/images/photo-radar.jpg" width="280"><br>HLK-LD2450 mmWave radar and its cable |
+
+## 3D-printed case
+
+A pixel-style mini TV, fully snap-fit: no screws, no glue. The same STL files give two color schemes, just swap filaments:
+
+| Classic black & grey | Cream × Claude orange |
 |:---:|:---:|
-| <img src="docs/images/photo-screen.jpg" width="420"><br>The magpie Agents page on the real screen (early light theme) | <img src="docs/images/photo-back.jpg" width="420"><br>Back of the board: ESP32-S3 module, external antenna, 2030 speaker on the Speak port |
-| <img src="docs/images/photo-radar.jpg" width="420"><br>HLK-LD2450 mmWave radar and its cable | <img src="case/preview/assembly-front.png" width="420"><br>3D-printed case (snap-fit, no screws) |
+| <img src="case/preview/theme-classic.png" width="400"><br>Black bezel and stand, dark-grey body and back | <img src="case/preview/theme-cream.png" width="400"><br>Cream bezel, back and stand, Claude-orange body ([three views](case/preview/theme-cream-views.png)) |
 
 ## Bill of materials
 
@@ -66,7 +73,7 @@ These are the exact parts the author bought. Prices are what was paid on Pinduod
 | Adapter cables | `MX1.25 4P to Dupont` | 20cm, pack of 5 | ¥10.56 | P1 / P3 / P4 | Turn the board's 1.25mm ports into Dupont headers for the mic and radar |
 | Dupont wires | `Dupont wire 20cm` | Male-to-male, strip of 10 | ¥2.47 | — | Join the radar kit cable (female) to the adapter cable (female) |
 
-Optional parts total about **¥76** (≈ US$11); with the board, the full set is about **¥175** (≈ US$25). The case can be 3D-printed: about 58 g of black and 104 g of dark-grey PLA; STL files are in [`case/stl/`](case/stl).
+Optional parts total about **¥76** (≈ US$11); with the board, the full set is about **¥175** (≈ US$25). The case can be 3D-printed ([two color schemes](#3d-printed-case)), about 160 g of PLA in total; STL files are in [`case/stl/`](case/stl).
 
 Notes:
 - **Check the battery polarity before plugging it in** — some sellers wire red / black the opposite way from the board's BAT port. Press **SW1** on the board once to power on.

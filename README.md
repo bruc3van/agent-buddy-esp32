@@ -37,10 +37,17 @@
 
 ## 实拍
 
-| | |
+| | | |
+|:---:|:---:|:---:|
+| <img src="docs/images/photo-screen.jpg" width="280"><br>点亮后的 magpie Agent 页（早期浅色界面） | <img src="docs/images/photo-back.jpg" width="280"><br>板子背面：ESP32-S3 模组、外置天线、2030 喇叭接在 Speak 口 | <img src="docs/images/photo-radar.jpg" width="280"><br>HLK-LD2450 毫米波雷达和接线 |
+
+## 3D 打印外壳
+
+像素风小电视造型，全卡扣，不用螺丝、不用胶。同一套 STL，换耗材颜色就是两套配色：
+
+| 经典黑灰 | 米白 × Claude 橙 |
 |:---:|:---:|
-| <img src="docs/images/photo-screen.jpg" width="420"><br>点亮后的 magpie Agent 页（早期浅色界面） | <img src="docs/images/photo-back.jpg" width="420"><br>板子背面：ESP32-S3 模组、外置天线、2030 喇叭接在 Speak 口 |
-| <img src="docs/images/photo-radar.jpg" width="420"><br>HLK-LD2450 毫米波雷达和接线 | <img src="case/preview/assembly-front.png" width="420"><br>3D 打印外壳（全卡扣，不用螺丝） |
+| <img src="case/preview/theme-classic.png" width="400"><br>前框、支架黑色，机身、后盖深灰 | <img src="case/preview/theme-cream.png" width="400"><br>前框、后盖、支架米白，机身 Claude 橙（[三视图](case/preview/theme-cream-views.png)） |
 
 ## 选购清单
 
@@ -64,7 +71,7 @@
 | 转接线 | `MX1.25 转杜邦线 4P` | 20cm，一份 5 条 | ¥10.56 | P1 / P3 / P4 | 板子的 1.25mm 扩展口转成杜邦头，接麦克风和雷达 |
 | 杜邦线 | `杜邦线 20cm` | 公对公，10 条一排 | ¥2.47 | — | 雷达套件线（母头）和转接线（母头）之间对接 |
 
-配件合计约 **¥76**，加上主板全套约 **¥175**。外壳可以自己 3D 打印：PLA 黑色约 58 g、深灰约 104 g，STL 在 [`case/stl/`](case/stl)，打印方法见[打印说明](case/打印说明.md)。
+配件合计约 **¥76**，加上主板全套约 **¥175**。外壳可以自己 3D 打印（[两套配色](#3d-打印外壳)），PLA 合计约 160 g，STL 在 [`case/stl/`](case/stl)，配色和打印方法见[打印说明](case/打印说明.md)。
 
 注意：
 - 锂电池**插之前先量好极性**，不同店家的红黑线顺序可能和板子的 BAT 口相反。插上后按一下板子上的 **SW1** 开机。
