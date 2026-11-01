@@ -536,7 +536,20 @@ def main():
     # 双击就能在 Blender 里看的预览场景：装配效果、爆炸图、打印摆放
     write_blend([(n, m.rotate([-TILT, 0, 0])) for n, m in (('前框', bz), ('机身', bd), ('后盖', bk))] + [('支架', st)],
                 os.path.join(HERE, '外壳预览.blend'))
+    write_zip(os.path.join(HERE, 'Agent-Buddy-外壳.zip'))
     print('ok')
+
+
+def write_zip(path):
+    """打印包：说明 + STL + 预览图 + .blend，发给别人打印用"""
+    import zipfile
+    files = ['打印说明.md', '组装清单.md', '外壳预览.blend']
+    files += ['stl/' + f for f in sorted(os.listdir(os.path.join(HERE, 'stl'))) if f.endswith('.stl')]
+    files += ['preview/' + f for f in sorted(os.listdir(os.path.join(HERE, 'preview'))) if f.endswith('.png')]
+    with zipfile.ZipFile(path, 'w', zipfile.ZIP_DEFLATED) as z:
+        for f in files:
+            if os.path.exists(os.path.join(HERE, f)):
+                z.write(os.path.join(HERE, f), f)
 
 
 if __name__ == '__main__':

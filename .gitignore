@@ -19,11 +19,7 @@ agent_buddy/build/
 case/.venv/
 case/__pycache__/
 case/*.zip
-# 打印包解压出来的副本（和 case/stl 重复）
-case/给朋友打印/
-case/帮我打印一个外壳/
 case/*.blend1
-/Agent-Buddy-外壳-打印包.zip
 
 # 宣传片：只提交脚本和定稿封面；渲染帧、成片、配乐都能用脚本重新生成
 promo/render/

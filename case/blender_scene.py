@@ -4,9 +4,11 @@
   blender --background --factory-startup --python blender_scene.py -- <装配姿态 STL 目录> <stl/ 目录> <输出 .blend>
 装配姿态的 STL 是 model.py 临时导出的（机身坐标 Y 朝上、Z 朝观众，整机已后仰）。
 """
+import math
 import os
 import sys
 
+import bmesh
 import bpy
 
 asm_dir, stl_dir, out = sys.argv[sys.argv.index('--') + 1:][:3]
@@ -41,6 +43,12 @@ def load(path, coll, name, loc=(0, 0, 0), **axes):
     o = bpy.context.selected_objects[0]
     o.name = name
     o.location = loc
+    # STL 全是三角面，大平面上会拉出一堆细长三角形；有限融并把共面的三角形合成大面，编辑模式里看着干净
+    bm = bmesh.new()
+    bm.from_mesh(o.data)
+    bmesh.ops.dissolve_limit(bm, angle_limit=math.radians(1), verts=bm.verts, edges=bm.edges)
+    bm.to_mesh(o.data)
+    bm.free()
     o.data.materials.append(material(name))
     for c in o.users_collection:
         c.objects.unlink(o)
@@ -83,4 +91,5 @@ for screen in bpy.data.screens:
         r3d.view_distance = 520
 for o in bpy.data.objects:
     o.select_set(False)
+bpy.context.preferences.filepaths.save_version = 0   # 不留 .blend1 备份
 bpy.ops.wm.save_as_mainfile(filepath=out, compress=True)
