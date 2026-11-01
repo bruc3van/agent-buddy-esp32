@@ -28,9 +28,15 @@ promo/*.mp4
 promo/*.wav
 promo/*.log
 promo/cover-60s.png
+# Blender 界面截图，blender_shots.py 可重新生成
+promo/blender/
 # 打码前的原始录屏和软件截图（有邮箱、对话列表）
 promo/screens/
 promo/apps/
 # Mixkit 配乐（授权不允许单独分发曲目）、商家商品图
 promo/music/
 promo/parts/
+
+# 宣传片制作记（本地留存，不提交）
+docs/宣传片是怎么做出来的.md
+docs/images/making/

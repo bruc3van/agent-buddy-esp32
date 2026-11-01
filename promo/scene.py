@@ -38,7 +38,8 @@ sc.render.fps = FPS
 sc.render.film_transparent = False
 sc.eevee.taa_render_samples = 32
 sc.render.filter_size = float(os.environ.get('FILTER', 0.9))  # 默认 1.5 会把亮底上的深色细字抹淡
-for k, v in (('use_raytracing', True), ('use_shadows', True), ('use_gtao', True)):
+# 不开光线追踪：屏幕玻璃的反射逐帧时有时无，结果更稳
+for k, v in (('use_raytracing', False), ('use_shadows', True), ('use_gtao', True)):
     if hasattr(sc.eevee, k):
         setattr(sc.eevee, k, v)
 if hasattr(sc.eevee, 'ray_tracing_options'):
@@ -70,7 +71,7 @@ def mat(name, color, rough, coat=0.0, spec=0.5):
 # 外壳：从预览 .blend 里拿「装配效果」的四个零件
 with bpy.data.libraries.load(os.path.join(ROOT, 'case', '外壳预览.blend')) as (src, dst):
     dst.objects = [n for n in src.objects if n.startswith('装配-')]
-M_BLACK = mat('黑 PLA', (0.012, 0.012, 0.014, 1), 0.38, coat=0.15)
+M_BLACK = mat('黑 PLA', (0.012, 0.012, 0.014, 1), 0.5, spec=0.25)  # 哑一点：开窗前沿的倒角会把顶光反成一条亮带
 M_GREY = mat('深灰 PLA', (0.018, 0.019, 0.023, 1), 0.45, coat=0.1)
 parts = {}
 for o in dst.objects:
@@ -108,7 +109,7 @@ def box(name, w, h, d, center, material):
     return o
 
 
-M_GLASS = mat('玻璃', (0.003, 0.003, 0.004, 1), 0.04, coat=1.0, spec=0.8)
+M_GLASS = mat('玻璃', (0.003, 0.003, 0.004, 1), 0.3, coat=0.0, spec=0.3)  # 哑一点：亮面反射会在黑边上闪
 M_PCB = mat('PCB', (0.02, 0.022, 0.02, 1), 0.5)
 
 # 显示区：发光贴图 + 一层亮面，读得出是玻璃
@@ -125,13 +126,15 @@ tex.interpolation = 'Closest'  # 像素风：放大不糊
 nt.links.new(tex.outputs['Color'], p.inputs['Emission Color'])
 p.inputs['Emission Strength'].default_value = 0.0
 
-glass_c = body(0.4, 1.0, 0.15)
-disp_c = body(0.4, 0.0, 0.3)
+# 和 case/model.py 对齐：前框压边，玻璃正面在前框正面后 SKIN + GLASS_FIT = 1.1mm；
+# 玻璃中心 (GLASS_DX, SCREEN_CY + GLASS_DY) = (0.4, 2.0)，显示区比玻璃中心低 2mm、正好在前脸正中；PCB 正面 z = -6.1
+glass_c = body(0.4, 2.0, -1.1)
+disp_c = body(0.4, 0.0, -1.05)
 screen_parts = [
-    plane('玻璃', 105.8, 67.6, glass_c, M_GLASS),
+    plane('玻璃', 105.0, 66.0, glass_c, M_GLASS),
     plane('显示区', 95.04, 53.86, disp_c, M_SCREEN),
-    box('屏幕模组', 105.0, 67.0, 4.6, body(0.4, 1.0, -2.3), M_PCB),
-    box('PCB', 120.0, 70.0, 1.6, body(0, 1.5, -5.8), M_PCB),
+    box('屏幕模组', 105.0, 66.0, 4.6, body(0.4, 2.0, -3.5), M_PCB),  # 正面在 -1.2：和玻璃（-1.1）重合会互相抢深度、逐帧闪
+    box('PCB', 120.0, 70.0, 1.6, body(0, 2.5, -6.9), M_PCB),
 ]
 
 # 地面：深色哑光，不反出灯（亮面会把背后的轮廓灯映成一块白斑）；远处靠灯光衰减自然没入黑色
@@ -357,6 +360,63 @@ def _():
     screen_video('home_split')
     screen_power([(1, SCREEN_ON)])
     return 360
+
+
+M_CREAM = mat('米白 PLA', (0.92, 0.86, 0.72, 1), 0.6)       # 哑光米白（偏暖，不能发灰）
+M_ORANGE = mat('Claude 橙 PLA', (0.69, 0.18, 0.105, 1), 0.6)  # #D97757
+
+
+@shot('duo')  # 片尾定格：两套配色并排，经典黑灰在左、米白 × Claude 橙在右
+def _():
+    gap = 0.085  # 两台中心离画面中线（机身宽 130mm，转过以后中间留点空）
+    p.inputs['Coat Weight'].default_value = 0.15  # 这个镜头有正面补光，屏幕亮面会反出一层灰雾
+    p.inputs['Roughness'].default_value = 0.4
+    p.inputs['Specular IOR Level'].default_value = 0.0  # 屏幕本身不反正面那盏大补光
+    m2 = M_SCREEN.copy()  # 右边那台的屏幕单独一份材质，放另一段录屏
+    t2 = m2.node_tree.nodes[tex.name]
+    img = bpy.data.images.load(os.path.join(HERE, 'tex', 'buddy_claude.mp4'))
+    img.source = 'MOVIE'
+    t2.image = img
+    iu = t2.image_user
+    iu.frame_duration, iu.frame_start, iu.use_cyclic, iu.use_auto_refresh = img.frame_duration, 1, True, True
+    m2.node_tree.nodes['Principled BSDF'].inputs['Emission Strength'].default_value = SCREEN_ON
+    def place(side):  # 绕整机中心转 30°、再往两边挪：摆成往里收的 V 字，右边那台露出橙色的右侧面
+        return (Matrix.Translation((side * gap, 0, 0)) @ Matrix.Translation(C) @ Matrix.Rotation(math.radians(-30 * side), 4, 'Z')
+                @ Matrix.Translation(-Vector(C)))
+
+    for o in list(parts.values()) + screen_parts:
+        c = o.copy()
+        c.data = o.data.copy()
+        sc.collection.objects.link(c)
+        key = o.name.split('-')[-1]
+        if o in parts.values():
+            c.data.materials[0] = M_ORANGE if key == '机身' else M_CREAM
+        elif o.name == '显示区':
+            c.data.materials[0] = m2
+        for obj, side in ((o, -1), (c, 1)):
+            obj.matrix_world = place(side) @ obj.matrix_world
+    # 影棚原本几乎只有顶光和背后的轮廓光，米白的正面会发灰、橙色侧面被暖色轮廓光照成粉色：
+    # 这个镜头补一盏正面柔光，右轮廓光调成中性、减弱
+    FILL.location = (0.0, -0.7, 0.25)
+    FILL.rotation_euler = (Vector(C) - Vector(FILL.location)).to_track_quat('-Z', 'Y').to_euler()
+    FILL.data.size = 0.8
+    FILL.data.energy = 3.0
+    RIM_R.data.energy = 1.5
+    RIM_R.data.color = (1, 1, 1)
+    RIM_L.data.energy = 1.5  # 左边那台的深灰机身侧面也别被照成浅灰
+    area('右侧柔光', (0.55, -0.35, 0.18), (0.09, 0, 0.02), 0.5, 2.0)  # 照亮橙色机身侧面（漫反射，不出白色高光）
+    # 颜色对齐外壳预览图（case/preview/theme-cream.png）：AgX 会把亮部的米白、橙色洗成灰粉，这个镜头改用 Standard、
+    # 略提亮；屏幕自发光跟着按比例调暗，免得过曝
+    exp = 0.1
+    sc.view_settings.view_transform = 'Standard'
+    sc.view_settings.look = 'None'
+    sc.view_settings.exposure = exp
+    on = 1.25  # Standard 不压高光：AgX 下用的 3.2 会把屏幕的黑底抬成灰
+    m2.node_tree.nodes['Principled BSDF'].inputs['Emission Strength'].default_value = on
+    camera_path(None, 1, 150, (-4, 12, 0.86), (4, 10, 0.80), C, C, 70, 72)
+    screen_video('home_claude')
+    screen_power([(1, on)])
+    return 150
 
 
 FEATURE_FSTOP = float(os.environ.get("FSTOP", 11))

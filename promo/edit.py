@@ -75,14 +75,14 @@ def text_layer(lines, align='center', y=None, anchor_y=0.5):
 _cache = {}
 
 
-def caption(frame, t, a, b, title, sub=None, pos='bottom', big=64, sub_size=34, align='center'):
+def caption(frame, t, a, b, title, sub=None, pos='bottom', big=76, sub_size=46, align='center'):  # 字号按手机竖屏看横屏视频定
     """苹果风字幕：主标题白色半粗，副标题灰色；淡入时往上浮 24px"""
     op, p = window(t, a, b)
     if op <= 0:
         return
     key = (title, sub, big, sub_size, align)
     if key not in _cache:
-        lines = [(title, font(big), WHITE, 0)]
+        lines = [(title, font(big), WHITE, 0)] if title else []  # title=None：只有一行小字
         if sub:
             lines.append((sub, font(sub_size, 'Regular'), GREY, 6))
         _cache[key] = text_layer(lines, align)
@@ -91,7 +91,7 @@ def caption(frame, t, a, b, title, sub=None, pos='bottom', big=64, sub_size=34, 
     if pos == 'bottom':
         x, y = (W - lw) // 2, H - lh - 70
     elif pos == 'top':
-        x, y = (W - lw) // 2, 70
+        x, y = (W - lw) // 2, 60
     elif pos == 'left':
         x, y = 140, (H - lh) // 2
     else:
@@ -215,7 +215,17 @@ class Clip:
 def photo(path):
     key = ('photo', path)
     if key not in _cache:
-        _cache[key] = Image.open(os.path.join(ROOT, path)).convert('RGB')
+        im = Image.open(os.path.join(ROOT, path)).convert('RGB')
+        a = np.asarray(im).astype(np.float32)
+        if path.startswith('docs/images/'):  # 手机拍的偏暖偏亮，和 3D 渲染的冷暗色调接不上：去暖、压暗、降一点饱和
+            g = a.mean(2, keepdims=True)
+            a = (a * 0.85 + g * 0.15) * np.array([0.9, 0.95, 1.04]) * 0.86
+        elif path.startswith('case/preview/'):  # 建模预览是浅灰底，抠成深底，免得在黑场之间闪白
+            bg = np.array([244, 243, 248], np.float32)
+            k = np.clip((np.abs(a - bg).max(2, keepdims=True) - 6) / 30, 0, 1)
+            a = a * k + np.array([14, 14, 17]) * (1 - k)
+        im = Image.fromarray(np.clip(a, 0, 255).astype(np.uint8))
+        _cache[key] = im
     return _cache[key]
 
 
@@ -225,21 +235,28 @@ def seg_text(lines_spec):
     def f(t, d):
         fr = black()
         for a, b, title, sub, pos in lines_spec:
-            caption(fr, t, a, b, title, sub, pos, big=60)
+            caption(fr, t, a, b, title, sub, pos, big=84)
         return fr
     return f
 
 
-def seg_3d(name, captions=(), fade_in=0.0, fade_out=0.0, wordmark=None, shrink=None, t0=0.0):
-    """t0：从镜头的第几秒开始用（短版截取片段）"""
+F_SHRINK = (0.74, -95)  # 功能近景缩小上移，给下面的大字幕让位置
+FINALE_SHRINK = (0.76, -120, 340)  # 片尾：羽化放宽，地面的灰不会露出一圈方框
+DUO_SUB = '两套配色：经典黑灰 · 米白 × Claude 橙\nDIY by @bruc3van · github.com/bruc3van/agent-buddy-esp32'
+DUO_SHRINK = (0.8, -110, 340)  # 片尾定格：两台并排，缩小上移给字标让位置
+FINALE_SUB = 'DIY by @bruc3van\ngithub.com/bruc3van/agent-buddy-esp32'
+
+
+def seg_3d(name, captions=(), fade_in=0.0, fade_out=0.0, wordmark=None, shrink=None, t0=0.0, sfx=()):
+    """t0：从镜头的第几秒开始用（短版截取片段）；shrink = (比例, 上移, [羽化宽度])；sfx = [(秒, 音效名 / 'say:文字')]"""
     seq = Seq(name)
 
     def f(t, d):
         fr = seq.frame(t + t0)
         if shrink:  # 画面缩小上移，给下方的字留位置（背景是纯黑，四周补黑看不出来）
-            k, dy = shrink
+            k, dy = shrink[:2]
             small = fr.resize((int(W * k), int(H * k)), Image.LANCZOS)
-            small.putalpha(_feather(small.size))
+            small.putalpha(_feather(small.size, *shrink[2:]))
             fr = black()
             fr.alpha_composite(small, ((W - small.size[0]) // 2, (H - small.size[1]) // 2 + dy))
         for c in captions:
@@ -251,6 +268,7 @@ def seg_3d(name, captions=(), fade_in=0.0, fade_out=0.0, wordmark=None, shrink=N
         if fade_out and t > d - fade_out:
             dim(fr, ease((t - (d - fade_out)) / fade_out))
         return fr
+    f.sfx = [(a - t0, n) for a, n in sfx]
     return f
 
 
@@ -259,13 +277,13 @@ _feathers = {}
 
 def _feather(size, edge=160):
     """四周 edge 像素渐隐的遮罩"""
-    if size not in _feathers:
+    if (size, edge) not in _feathers:
         w, h = size
         x = np.minimum(np.arange(w), np.arange(w)[::-1]) / edge
         y = np.minimum(np.arange(h), np.arange(h)[::-1]) / edge
         m = np.clip(np.minimum(x[None, :], y[:, None]), 0, 1)
-        _feathers[size] = Image.fromarray((m * m * (3 - 2 * m) * 255).astype(np.uint8))
-    return _feathers[size]
+        _feathers[size, edge] = Image.fromarray((m * m * (3 - 2 * m) * 255).astype(np.uint8))
+    return _feathers[size, edge]
 
 
 def wm_layer(fr, t, a, b, sub=None, y=None):
@@ -276,8 +294,10 @@ def wm_layer(fr, t, a, b, sub=None, y=None):
     key = ('wm', sub)
     if key not in _cache:
         lines = [('Agent Buddy', font(112, 'Semibold', sf=True), WHITE, 0)]
-        if sub:
-            lines.append((sub, font(40, 'Regular'), GREY, 4))
+        subs = sub.split('\n') if sub else []
+        for i, line in enumerate(subs):  # 第一行灰色大一号；最后一行（仓库地址）蓝色
+            url = i == len(subs) - 1 and i > 0
+            lines.append((line, font(50 if i == 0 else 40, 'Regular'), (120, 150, 255) if url else GREY, 4 if i == 0 else 14))
         _cache[key] = text_layer(lines)
     L = _cache[key]
     if y is not None and y > H / 2:
@@ -297,16 +317,17 @@ def device_card(fr, clip, t, cx, cy, w, op=1.0, start=0.0, glow_col=(90, 110, 20
     fr.alpha_composite(fade_alpha(card, op), (x, y))
 
 
-def seg_flat(name, title, sub, start=0.0):
-    """平面像素屏：录屏铺成大卡片，慢慢放大"""
+def seg_flat(name, title, sub, start=0.0, sfx=()):
+    """平面像素屏：录屏铺成大卡片"""
     def f(t, d):
         clip = Clip(name)
         fr = black()
         w = 1200  # 固定大小：逐帧缩放会让像素抖动
         op = ease(t / 0.4) * ease((d - t) / 0.3)
         device_card(fr, clip, t, W / 2, H / 2 - 50, w, op, start)
-        caption(fr, t, 0.3, d - 0.2, title, sub, 'bottom', big=56)
+        caption(fr, t, 0.3, d - 0.2, title, sub, 'bottom', big=72)
         return fr
+    f.sfx = list(sfx)
     return f
 
 
@@ -316,6 +337,7 @@ PARTS = [  # 高清商品图（promo/parts/hd-*.webp）、裁剪框（None = 整
     ('hd-3-mic', None, 'INMP441', 'I2S 数字麦克风', '¥15.8'),
     ('hd-4-speaker', None, '2030 腔体喇叭', '8Ω · 0.5–2W', '¥5.4'),
     ('hd-5-battery', (0, 0, 1106, 548), '聚合物锂电池', '3.7V · 1200 mAh', '¥13.86'),
+    ('hd-6-wire', (40, 175, 1180, 1000), '端子转杜邦线', 'XH2.54 / PH2.0 / 1.25 多规格', '¥12.74'),
 ]
 
 
@@ -349,7 +371,7 @@ def seg_parts(t, d):
     fr.alpha_composite(fade_alpha(card, prog), (cx, cy + round(40 * (1 - prog))))
     key = ('partt', name)
     if key not in _cache:
-        _cache[key] = text_layer([(name, font(72), WHITE, 0), (sub, font(36, 'Regular'), GREY, 6),
+        _cache[key] = text_layer([(name, font(72), WHITE, 0), (sub, font(44, 'Regular'), GREY, 6),
                                   (price, font(84, 'Semibold', sf=True), (255, 170, 120), 40)], 'left')
     L = _cache[key]
     tp = ease_out((lt - 0.08) / 0.35)
@@ -386,7 +408,7 @@ def full(t, path, dur, fx=0.5, fy=0.5):
 
 def design(t, dur):
     """CAD 三视图（浅色底）"""
-    fr = Image.new('RGBA', (W, H), (244, 243, 248, 255))
+    fr = Image.new('RGBA', (W, H), (14, 14, 17, 255))
     for k, n in enumerate(('assembly-front', 'assembly-side', 'assembly-back')):
         prog = ease_out((t - k * 0.15) / 0.5)
         im = photo(f'case/preview/{n}.png').convert('RGBA')
@@ -408,16 +430,16 @@ def seg_photos(t, d):
     step = d / len(shots)
     i = min(len(shots) - 1, int(t / step))
     fr = shots[i](t - i * step, step)
-    caption(fr, t, 0.2, step * 2 - 0.1, '买来零件', '屏幕主板、雷达、麦克风、喇叭、电池', 'bottom', big=56)
-    caption(fr, t, step * 2 + 0.1, step * 5 - 0.1, '亲手接线', '一根线、一个口，慢慢拼起来', 'bottom', big=56)
-    caption(fr, t, step * 5 + 0.1, d - 0.1, '自己设计外壳', '参数化建模，改一个数字就能重新出图', 'bottom', big=56)
+    caption(fr, t, 0.2, step * 2 - 0.1, '买来零件', '屏幕主板、雷达、麦克风、喇叭、电池', 'bottom', big=72)
+    caption(fr, t, step * 2 + 0.1, step * 5 - 0.1, '亲手接线', '一根线、一个口，慢慢拼起来', 'bottom', big=72)
+    caption(fr, t, step * 5 + 0.1, d - 0.1, '自己设计外壳', '参数化建模，改一个数字就能重新出图', 'bottom', big=72)
     return fr
 
 
 SIDEBAR = {'claude.png': 580, 'dsh.png': 575}  # 侧栏右边界（截图像素）
 APPS = [('promo/apps/claude.png', 'Claude Code', '你照常在电脑上写代码'),
-        ('promo/apps/terminal.png', 'buddy status', '一条命令检查连接、额度和 hooks'),
         ('promo/apps/dsh.png', 'DeepSeek Harness', 'Codex、DeepSeek 一样接得上')]
+APP_CROP = {'claude.png': (200, 1150, 1800, 1952), 'dsh.png': (180, 150, 1500, 960)}  # 去掉侧栏后再裁：只留对话区关键部分，放大看得清
 
 
 def app_img(path):
@@ -425,7 +447,9 @@ def app_img(path):
     if key not in _cache:
         im = Image.open(os.path.join(ROOT, path)).convert('RGBA')
         if 'claude' in path or 'dsh' in path:  # 左侧是对话 / 工作区列表，涉及隐私，只留右边的对话区
-            im = rounded(im.crop((SIDEBAR[os.path.basename(path)], 0, im.size[0], im.size[1])).convert('RGB'), 22)
+            im = im.crop((SIDEBAR[os.path.basename(path)], 0, im.size[0], im.size[1])).crop(APP_CROP[os.path.basename(path)])
+            im = Image.fromarray((np.asarray(im.convert('RGB')) * 0.86).astype(np.uint8))  # 浅色窗口压暗一点，夹在黑场之间不刺眼
+            im = rounded(im, 22)
         if 'terminal' in path:  # 去掉 DSH 插件版本那条提示和退出后的输出，只留状态
             top = im.crop((0, 0, im.size[0], 345))
             bot = im.crop((0, 410, im.size[0], 545))
@@ -463,7 +487,7 @@ def seg_apps(t, d):
         px = 1180 + ((t * 160 + k * 30) % 180)
         a = int(200 * math.sin(math.pi * ((t * 160 + k * 30) % 180) / 180))
         ImageDraw.Draw(fr).ellipse((px - 3, H / 2 - 63, px + 3, H / 2 - 57), fill=(120, 160, 255, a))
-    caption(fr, lt, 0.3, step - 0.15, title, sub, 'bottom', big=52)
+    caption(fr, lt, 0.3, step - 0.15, title, sub, 'bottom', big=68)
     return fr
 
 
@@ -484,7 +508,7 @@ def seg_grid(t, d):
         cx = W / 2 + (cx - W / 2) * z
         cy = H / 2 - 50 + (cy - H / 2 + 50) * z
         device_card(fr, Clip(n), t, cx, cy, int(cw * z), op, start=k * 0.7, glow_col=(70, 80, 140))
-    caption(fr, t, 0.8, d - 0.2, '每一个界面，都是一格格画出来的像素', '480 × 272，每秒刷新二十多帧', 'bottom', big=52)
+    caption(fr, t, 0.8, d - 0.2, '每一个界面，都是一格格画出来的像素', '480 × 272，每秒刷新二十多帧', 'bottom', big=68)
     return fr
 
 
@@ -527,71 +551,281 @@ def seg_specs(t, d):
         dd.text(((W - (sb[2] - sb[0])) / 2, 300), sub, font=s, fill=GREY)
         _cache[key] = L
     L = _cache[key]
-    op = min(ease(lt / 0.35), ease((step - lt) / 0.3))
+    op = ease(lt / 0.15)  # 一张接一张直接切，不再每张都淡出到黑场
     fr.alpha_composite(fade_alpha(L, op), ((W - L.size[0]) // 2, (H - L.size[1]) // 2))
     return fr
 
 
 # ---------------- 时间线 ----------------
-TIMELINE = [
-    # (时长, 镜头)
-    (6, seg_text([(0.6, 3.0, 'AI 正在替你写代码。', None, 'center'),
-                  (3.3, 5.8, '它在想什么？做到哪了？在等你什么？', None, 'center')])),
-    (14, seg_3d('opener_full', fade_in=1.0, wordmark=(7.0, 13.6, '放在桌上的 AI 编程搭子', 805))),  # 亮起 + 环绕一镜到底
-    (2, seg_text([(0.15, 1.9, '从一块 ¥99 的屏幕开始。', None, 'center')])),
-    (5, seg_parts),
-    (10, seg_photos),
-    (3, seg_text([(0.2, 2.8, '然后，给它一个家。', None, 'center')])),
-    (8, seg_3d('assemble', [(0.8, 7.6, '3D 打印外壳', '四个零件，全卡扣，一颗螺丝都不用')])),
-    (5, seg_3d('side', [(0.5, 4.7, '后仰 15°', '刚好对着你的视线')])),
-    (6, seg_3d('back', [(0.6, 5.7, '喇叭、麦克风、电池', '都收进 130 × 87 mm 的机身里')], fade_out=0.6)),
-    (3, seg_text([(0.3, 2.8, '它知道你的 AI 在做什么。', None, 'center')])),
-    (4, seg_3d('f_buddy_claude', [(0.3, 3.9, 'Claude Code', '思考、写代码、运行命令、等你确认')], shrink=(0.78, -80))),
-    (4, seg_3d('f_buddy_codex', [(0.3, 3.9, 'Codex', '云朵小机器人抱着笔记本敲代码')], shrink=(0.78, -80))),
-    (4, seg_3d('f_buddy_deepseek', [(0.3, 3.9, 'DeepSeek', '小鲸鱼住在墙上的鱼缸里')], shrink=(0.78, -80))),
-    (4, seg_3d('f_home_split', [(0.3, 3.9, '一起开工', '几个 Agent 同时干活，显示器自动分屏')], shrink=(0.78, -80))),
-    (10, seg_apps),
-    (4, seg_3d('f_magpie_usage', [(0.3, 3.9, '用量一目了然', 'Token、请求、费用、缓存命中率')], shrink=(0.78, -80))),
-    (4, seg_3d('f_magpie_route', [(0.3, 3.9, '每一次请求', '都会从屏幕上飞过')], shrink=(0.78, -80))),
-    (4, seg_3d('f_radar', [(0.3, 3.9, '毫米波雷达', '知道你在不在座位，身后有没有人靠近')], shrink=(0.78, -80))),
-    (4, seg_3d('f_standby', [(0.3, 3.9, '离开时', '自动变成翻页钟')], shrink=(0.78, -80))),
-    (4, seg_3d('f_welcome_back', [(0.3, 3.9, '回来时', '告诉你这段时间完成了什么')], shrink=(0.78, -80))),
-    (10, seg_grid),
-    (4, seg_flat('settings_sound', '会出声', '8-bit 提示音，中文语音播报')),
-    (4, seg_flat('settings_pc', '拔掉线，也在线', '自动切到 Wi-Fi，双向认证 + AES-256-GCM 加密')),
-    (4, seg_text([(0.2, 3.8, '一条命令，装好就能用。', 'macOS 与 Windows 都支持 · ./setup.sh', 'center')])),
-    (10, seg_3d('turn')),
-    (20, seg_specs),
-    (12, seg_3d('lowfront', [(1.0, 11.4, '自己动手，做一台。', '外壳 STL、固件、电脑端，全部开源')])),
-    (7, seg_3d('finale', wordmark=(1.2, 7.0, 'DIY by @bruc3van', 805), fade_out=1.6, shrink=(0.8, -90))),
-    (1, lambda t, d: black()),
-]
 
 
-F_SHRINK = (0.78, -80)
 # 1 分钟短版：只看成品——3D 镜头和屏幕上的各个功能
+SPLIT_SFX = [(2.97, 'done')]  # 录屏里 Claude 的显示器 2.97 秒变成 ✓
+WELCOME_SFX = [(0.55, 'alert')]  # 弹窗 0.5 秒出来，板子叮咚一声（不放语音播报）
+
 TIMELINE_SHORT = [
     (9.5, seg_3d('opener', fade_in=0.8, wordmark=(5.1, 9.3, '放在桌上的 AI 编程搭子', 805))),  # 亮起 + 环绕一镜到底
     (4, seg_3d('f_buddy_claude', [(0.3, 3.9, 'Claude Code', '思考、写代码、运行命令、等你确认')], shrink=F_SHRINK)),
     (4, seg_3d('f_buddy_codex', [(0.3, 3.9, 'Codex', '云朵小机器人抱着笔记本敲代码')], shrink=F_SHRINK)),
     (4, seg_3d('f_buddy_deepseek', [(0.3, 3.9, 'DeepSeek', '小鲸鱼住在墙上的鱼缸里')], shrink=F_SHRINK)),
-    (4, seg_3d('f_home_split', [(0.3, 3.9, '一起开工', '几个 Agent 同时干活，显示器自动分屏')], shrink=F_SHRINK)),
-    (5, seg_3d('turn', [(0.4, 4.8, '3D 打印外壳', '四个零件，全卡扣，一颗螺丝都不用')], t0=1.0)),
-    (4, seg_3d('back', [(0.3, 3.8, '喇叭、麦克风、电池', '都收进 130 × 87 mm 的机身里')], t0=1.0)),
+    (4, seg_3d('f_home_split', [(0.3, 3.9, '一起开工', '几个 Agent 同时干活，显示器自动分屏')], shrink=F_SHRINK, sfx=SPLIT_SFX)),
+    (5, seg_3d('turn', [(0.4, 4.8, '3D 打印外壳', '四个零件，全卡扣，一颗螺丝都不用')], t0=2.5)),  # 转到 124°，背面镜头从 130° 接着转
+    (4, seg_3d('back', [(0.3, 3.8, '喇叭、麦克风、电池', '都收进 130 × 89 mm 的机身里')], t0=1.0)),
     (4, seg_3d('f_magpie_route', [(0.3, 3.9, '每一次请求', '都会从屏幕上飞过')], shrink=F_SHRINK)),
     (4, seg_3d('f_radar', [(0.3, 3.9, '毫米波雷达', '知道你在不在座位，身后有没有人靠近')], shrink=F_SHRINK)),
     (3.5, seg_3d('f_standby', [(0.3, 3.4, '离开时', '自动变成翻页钟')], shrink=F_SHRINK)),
-    (3.5, seg_3d('f_welcome_back', [(0.3, 3.4, '回来时', '告诉你这段时间完成了什么')], shrink=F_SHRINK)),
+    (3.5, seg_3d('f_welcome_back', [(0.3, 3.4, '回来时', '告诉你这段时间完成了什么')], shrink=F_SHRINK, sfx=WELCOME_SFX)),
     (5, seg_3d('lowfront', [(0.4, 4.8, '自己动手，做一台。', '外壳 STL、固件、电脑端，全部开源')], t0=3.0)),
-    (5.5, seg_3d('finale', wordmark=(0.8, 5.5, 'DIY by @bruc3van', 805), fade_out=1.5, shrink=(0.8, -90), t0=1.5)),
+    (2, seg_3d('finale', fade_out=0.4, shrink=FINALE_SHRINK, t0=1.5)),
+    (3.5, seg_3d('duo', fade_in=0.4, wordmark=(0.3, 99, DUO_SUB, 745), shrink=DUO_SHRINK, t0=1.5)),  # 定格在两套配色上
 ]
+
+# ---------------- 60 秒 DIY 版：零件 → 接线 → 画外壳 → 3D 打印组装 → 成品 ----------------
+B = 60 / 118.05  # 配乐一拍（118 BPM），剪辑点都落在拍子上
+
+
+def seg_wiring(t, d):
+    """手拍接线照片：2 拍、3 拍、3 拍（屏幕实拍偏色，不用）"""
+    shots = [
+        (2, lambda u, s: full(u, 'docs/images/photo-back.jpg', s)),
+        (3, lambda u, s: panels(u, PORTRAITS[:3], s)),
+        (3, lambda u, s: full(u, 'docs/images/photo-radar.jpg', s)),
+    ]
+    a = 0.0
+    for beats, shot in shots:
+        if t < a + beats * B or beats == shots[-1][0] and shot is shots[-1][1]:
+            fr = shot(t - a, beats * B)
+            break
+        a += beats * B
+    caption(fr, t, 0.2, d - 0.1, '亲手接线', '一根线、一个口，慢慢拼起来', 'bottom')
+    return fr
+
+
+BLENDER = [  # Blender 界面截图（promo/blender_shots.py 截的，3840×2160）、取景框（None = 整个窗口）
+    ('1-all', None),
+    ('2-explode', (0, 90, 3160, 1868)),
+    ('3-xray', (0, 90, 3160, 1868)),
+    ('4-print', (300, 260, 3060, 1812)),
+]
+
+
+def seg_design(t, d):
+    """在 Blender 里画外壳：先看整个窗口，再切进视图里看爆炸图、线框、打印摆放，每张两拍慢慢推近"""
+    step = d / len(BLENDER)
+    i = min(len(BLENDER) - 1, int(t / step))
+    lt = t - i * step
+    name, box = BLENDER[i]
+    key = ('blender', name)
+    if key not in _cache:
+        im = Image.open(os.path.join(HERE, 'blender', name + '.png')).convert('RGB')
+        _cache[key] = im.crop(box) if box else im
+    fr = cover(_cache[key], W, H, zoom=1.0 + 0.05 * lt / step).convert('RGBA')
+    caption(fr, t, 0.2, d - 0.1, '自己画外壳', '在 Blender 里建模，四个零件分开打印', 'bottom')
+    return fr
+
+
+def seg_parts_diy(t, d):
+    fr = seg_parts(t, d)
+    caption(fr, t, 0.1, d - 0.1, None, '买来零件，一共 ¥175', 'top')
+    return fr
+
+
+TIMELINE_DIY = [
+    (6 * B, seg_text([(0.5, 6 * B - 0.1, '¥175，自己做一台 AI 编程搭子。', '买零件、接线、画外壳、3D 打印、组装', 'center')])),
+    (12 * B, seg_parts_diy),
+    (8 * B, seg_wiring),
+    (8 * B, seg_design),
+    (16 * B, seg_3d('assemble', [(0.6, 16 * B - 0.2, '3D 打印外壳', '四个零件，全卡扣，一颗螺丝都不用')], sfx=[(6.3, 'poke')])),
+    (6 * B, seg_3d('side', [(0.3, 6 * B - 0.2, '后仰 15°', '刚好对着你的视线')], t0=1.6)),  # 侧面镜头开头太黑，从 1.6 秒用起
+    (10 * B, seg_3d('back', [(0.4, 10 * B - 0.2, '喇叭、麦克风、电池', '都收进 130 × 89 mm 的机身里')], t0=0.6)),
+    (7 * B, seg_3d('f_home_split', [(0.3, 7 * B - 0.1, '装好，接上电脑', 'Claude Code、Codex 在干什么，一眼就知道')],
+                   shrink=F_SHRINK, sfx=SPLIT_SFX)),
+    (7 * B, seg_3d('f_radar', [(0.3, 7 * B - 0.1, '毫米波雷达', '知道你在不在座位')], shrink=F_SHRINK)),
+    (7 * B, seg_3d('f_standby', [(0.3, 7 * B - 0.1, '离开时', '自动变成翻页钟')], shrink=F_SHRINK)),
+    (7 * B, seg_3d('f_welcome_back', [(0.3, 7 * B - 0.1, '回来时', '告诉你这段时间完成了什么')], shrink=F_SHRINK, sfx=WELCOME_SFX)),
+    (8 * B, seg_3d('lowfront', [(0.4, 8 * B - 0.2, '自己动手，做一台。', '外壳 STL、固件、电脑端，全部开源')], t0=3.0)),
+    (6 * B, seg_3d('finale', fade_out=0.4, shrink=FINALE_SHRINK)),
+    (60 - 108 * B, seg_3d('duo', fade_in=0.4, wordmark=(0.4, 99, DUO_SUB, 745), shrink=DUO_SHRINK)),  # 定格在两套配色上
+]
+
+
+# ---------------- 完整版 ----------------
+MONO = '/System/Library/Fonts/SFNSMono.ttf'
+SETUP_LINES = [  # 照抄 setup.sh → buddy.py setup 的输出（步骤标题、✓ 行）
+    ('$ ./setup.sh', WHITE),
+    ('Agent Buddy 一键配置（macOS）', WHITE),
+    ('', None),
+    ('[1] 检查 Python 环境', (130, 170, 255)),
+    ('  ✓ Python 3.13.14，依赖齐全', (110, 220, 140)),
+    ('[2] 注册 Claude Code / Codex / DeepSeek Harness 的 hooks', (130, 170, 255)),
+    ('[3] 连接板子', (130, 170, 255)),
+    ('  · 板子上已经是 Agent Buddy 固件 4.1.1，跳过烧录', GREY),
+    ('[4] 开机自启', (130, 170, 255)),
+    ('[5] 启动并自检', (130, 170, 255)),
+    ('  ✓ bridge 已连上板子', (110, 220, 140)),
+    ('  ✓ 已发一条测试通知：屏幕上应该弹出「欢迎回来」', (110, 220, 140)),
+]
+SETUP_T = [0.0, 0.9, 0.9, 1.1, 1.4, 1.6, 2.0, 2.3, 2.6, 2.8, 3.2, 3.5]  # 每行出现的时间（第一行是逐字敲出来的）
+SETUP_DONE = SETUP_T[-1]
+
+
+def mono_text(d, xy, txt, col, size=30):
+    """英文数字用等宽字体，中文用苹方"""
+    x, y = xy
+    fm, fc = ImageFont.truetype(MONO, size), font(size, 'Regular')
+    for ch in txt:
+        f = fm if ord(ch) < 0x2E80 and ch not in '·「」' else fc  # ✓ 苹方里没有，用等宽字体的
+        d.text((x, y), ch, font=f, fill=col)
+        x += f.getlength(ch)
+
+
+def seg_setup(t, d):
+    """左边终端跑 ./setup.sh，最后一行打出来的那一刻，右边板子弹出「欢迎回来」"""
+    fr = Image.new('RGBA', (W, H), (10, 10, 12, 255))
+    tw, th = 1040, 640
+    term = Image.new('RGBA', (tw, th), (28, 28, 32, 255))
+    dd = ImageDraw.Draw(term)
+    dd.rectangle((0, 0, tw, 44), fill=(44, 44, 50))
+    for k, c in enumerate(((255, 95, 87), (254, 188, 46), (40, 200, 64))):
+        dd.ellipse((18 + k * 26, 15, 32 + k * 26, 29), fill=c)
+    yy = 70
+    for (txt, col), at in zip(SETUP_LINES, SETUP_T):
+        if t >= at and txt:
+            shown = txt[:2 + int((t - 0.15) / 0.06)] if at == 0 else txt  # 命令逐字敲出
+            mono_text(dd, (28, yy), shown, col, 28)
+        yy += 44
+    term = rounded(term, 18)
+    sh, pad = shadow(term.size, 18)
+    x, y = 80, (H - th) // 2 - 60
+    op = ease(t / 0.4)
+    fr.alpha_composite(fade_alpha(sh, op), (x - pad, y - pad + 20))
+    fr.alpha_composite(fade_alpha(term, op), (x, y))
+    if t < SETUP_DONE - 0.5:
+        device_card(fr, Clip('home_idle'), t, 1500, H / 2 - 60, 640, op)
+    else:  # 录屏 0.5 秒时弹窗出来，正好对上最后一行
+        device_card(fr, Clip('welcome_back'), t - (SETUP_DONE - 0.5), 1500, H / 2 - 60, 640)
+    caption(fr, t, 0.3, d - 0.2, '一条命令，装好就能用', 'macOS 与 Windows 都支持', 'bottom')
+    return fr
+
+
+seg_setup.sfx = [(SETUP_DONE, 'alert')]
+SOUND_SFX = [(0.7, 'start'), (1.4, 'done'), (2.7, 'alert')]  # 「会出声」：板子上的几种提示音（不放语音）
+
+TIMELINE = [
+    (6, seg_text([(0.6, 3.0, 'AI 正在替你写代码。', None, 'center'),
+                  (3.3, 5.8, '它在想什么？做到哪了？在等你什么？', None, 'center')])),
+    (14, seg_3d('opener_full', fade_in=1.0, wordmark=(7.0, 13.6, '放在桌上的 AI 编程搭子', 805))),  # 亮起 + 环绕一镜到底
+    (2, seg_text([(0.15, 1.9, '从一块 ¥99 的屏幕开始。', None, 'center')])),
+    (6, seg_parts),
+    (6, seg_wiring),
+    (5, seg_design),
+    (8, seg_3d('assemble', [(0.8, 7.6, '3D 打印外壳', '四个零件，全卡扣，一颗螺丝都不用')], sfx=[(6.3, 'poke')])),
+    (4, seg_3d('side', [(0.4, 3.8, '后仰 15°', '刚好对着你的视线')], t0=1.6)),
+    (5, seg_3d('back', [(0.5, 4.7, '喇叭、麦克风、电池', '都收进 130 × 89 mm 的机身里')], fade_out=0.5, t0=0.6)),
+    (3, seg_text([(0.3, 2.8, '它知道你的 AI 在做什么。', None, 'center')])),
+    (3.5, seg_3d('f_buddy_claude', [(0.3, 3.4, 'Claude Code', '思考、写代码、运行命令、等你确认')], shrink=F_SHRINK)),
+    (3.5, seg_3d('f_buddy_codex', [(0.3, 3.4, 'Codex', '云朵小机器人抱着笔记本敲代码')], shrink=F_SHRINK)),
+    (3.5, seg_3d('f_buddy_deepseek', [(0.3, 3.4, 'DeepSeek', '小鲸鱼住在墙上的鱼缸里')], shrink=F_SHRINK)),
+    (3.5, seg_3d('f_home_split', [(0.3, 3.4, '一起开工', '几个 Agent 同时干活，显示器自动分屏')], shrink=F_SHRINK, sfx=SPLIT_SFX)),
+    (3, seg_3d('hero', t0=0.5)),  # 整机换口气：连着几个屏幕近景之后，让观众重新看到整台机器
+    (7, seg_apps),
+    (3.5, seg_3d('f_magpie_usage', [(0.3, 3.4, '用量一目了然', 'Token、请求、费用、缓存命中率')], shrink=F_SHRINK)),
+    (3.5, seg_3d('f_magpie_route', [(0.3, 3.4, '每一次请求', '都会从屏幕上飞过')], shrink=F_SHRINK)),
+    (3, seg_3d('hero', t0=4.5)),  # 整机
+    (3.5, seg_3d('f_radar', [(0.3, 3.4, '毫米波雷达', '知道你在不在座位，身后有没有人靠近')], shrink=F_SHRINK)),
+    (3.5, seg_3d('f_standby', [(0.3, 3.4, '离开时', '自动变成翻页钟')], shrink=F_SHRINK)),
+    (3.5, seg_3d('f_welcome_back', [(0.3, 3.4, '回来时', '告诉你这段时间完成了什么')], shrink=F_SHRINK, sfx=WELCOME_SFX)),
+    (5, seg_grid),
+    (4.5, seg_flat('settings_sound', '会出声', '完成、等你确认、出错，各有各的提示音', sfx=SOUND_SFX)),
+    (4, seg_flat('settings_pc', '拔掉线，也在线', '自动切到 Wi-Fi，双向认证 + AES-256-GCM 加密')),
+    (6, seg_setup),
+    (10, seg_3d('turn')),
+    (12, seg_specs),
+    (10, seg_3d('lowfront', [(0.8, 9.6, '自己动手，做一台。', '外壳 STL、固件、电脑端，全部开源')], t0=1.0)),
+    (3.5, seg_3d('finale', fade_out=0.4, shrink=FINALE_SHRINK)),
+    (6, seg_3d('duo', fade_in=0.4, wordmark=(0.4, 99, DUO_SUB, 745), shrink=DUO_SHRINK)),  # 定格在两套配色上
+]
+
 FULL_TIMELINE = TIMELINE
 CUTS = {  # --cut：时间线、配乐、输出文件、封面取哪一秒、封面文件
     'full': ('TIMELINE', 'music.wav', 'Agent-Buddy-宣传片.mp4', 17.5, 'cover.png'),
     'short': ('TIMELINE_SHORT', 'music_60.wav', 'Agent-Buddy-宣传片-60s.mp4', 17.5, 'cover.png'),  # 封面和完整版同一张
+    'diy': ('TIMELINE_DIY', 'music_60.wav', 'Agent-Buddy-DIY-60s.mp4', 17.5, 'cover.png'),
 }
 COVER_AT, COVER_PNG = 17.5, 'cover.png'   # 封面取这一刻的画面（主视角 + Agent Buddy 字标），main 里按 --cut 改
 COVER_HOLD, COVER_FADE = 0.4, 0.6
+
+
+# ---------------- 声音：板子的 8-bit 提示音和语音播报，混进配乐 ----------------
+SR = 48000
+SFX = {  # 照抄固件 hw_spk.ino 的 sfxPlay：(频率 Hz 或 0 = 停顿, 毫秒, 音量, 波形 0 方波 / 1 三角波)
+    'start': [(1320, 45, 0.18, 1)],
+    'done': [(784, 70, 0.22, 0), (988, 70, 0.22, 0), (1175, 70, 0.22, 0), (1568, 180, 0.22, 0)],
+    'alert': [(988, 130, 0.25, 0), (0, 50, 0, 0), (1319, 200, 0.25, 0)],
+    'poke': [(1047, 50, 0.2, 0)],
+}
+
+
+def sfx_wave(name):
+    out = []
+    for f, ms, amp, wave in SFX[name]:
+        n = SR * ms // 1000
+        i = np.arange(n)
+        if not f:
+            out.append(np.zeros(n))
+            continue
+        ph = (i * f / SR) % 1.0
+        w = np.where(ph < 0.5, 1.0, -1.0) if wave == 0 else np.where(ph < 0.5, 4 * ph - 1, 3 - 4 * ph)
+        env = np.minimum(1, np.minimum(i / (SR * 0.003), (n - i) / (SR * 0.015)))
+        out.append(amp * env * w)
+    return np.concatenate(out)
+
+
+def say_wave(text):
+    """和 bridge 一样用 macOS 的 say（婷婷），16 kHz 生成再升到 48 kHz"""
+    path = os.path.join(HERE, '.say.wav')
+    subprocess.run(['say', '-v', 'Tingting', '-o', path, '--data-format=LEI16@16000', '--', text], check=True)
+    raw = subprocess.run(['ffmpeg', '-v', 'error', '-i', path, '-ar', str(SR), '-ac', '1', '-f', 'f32le', '-'],
+                         capture_output=True, check=True).stdout
+    os.remove(path)
+    return np.frombuffer(raw, np.float32).astype(np.float64) * 0.9
+
+
+def speaker(x):
+    """板子上是 2030 小喇叭：低频出不来，高频也有限"""
+    X = np.fft.rfft(x)
+    f = np.fft.rfftfreq(len(x), 1 / SR) + 1e-3
+    X /= np.sqrt(1 + (350 / f) ** 4) * np.sqrt(1 + (f / 6500) ** 4)
+    return np.fft.irfft(X, len(x))
+
+
+def mix_audio(music, timeline):
+    """把各镜头的 sfx 按时间铺好；出声时配乐压低一些，提示音才听得清"""
+    raw = subprocess.run(['ffmpeg', '-v', 'error', '-i', os.path.join(HERE, music), '-ar', str(SR), '-ac', '2',
+                          '-f', 'f32le', '-'], capture_output=True, check=True).stdout
+    m = np.frombuffer(raw, np.float32).reshape(-1, 2).astype(np.float64)
+    fx = np.zeros(len(m))
+    duck = np.zeros(len(m))
+    start = 0.0
+    for d, fn in timeline:
+        for at, name in getattr(fn, 'sfx', []):
+            if not 0 <= at < d:
+                continue
+            x = say_wave(name[4:]) if name.startswith('say:') else sfx_wave(name)
+            x = speaker(np.concatenate([x, np.zeros(SR // 10)]))
+            i = int((start + at) * SR)
+            j = min(len(fx), i + len(x))
+            fx[i:j] += x[:j - i]
+            duck[max(0, i - SR // 10):j] = 1
+        start += d
+    k = int(0.15 * SR)  # 压低和恢复各 150ms 的斜坡
+    duck = np.convolve(duck, np.ones(k) / k, 'same')
+    y = m * (1 - 0.55 * duck)[:, None] + fx[:, None] * 0.5
+    y /= max(1.0, np.abs(y).max() / 0.95)
+    path = os.path.join(HERE, '.mix.wav')
+    subprocess.run(['ffmpeg', '-v', 'error', '-y', '-f', 'f32le', '-ar', str(SR), '-ac', '2', '-i', '-',
+                    '-c:a', 'pcm_s16le', path], input=y.astype(np.float32).tobytes(), check=True)
+    return path
 
 
 def frame_at(T):
@@ -624,9 +858,10 @@ def main():
     total = sum(d for d, _ in TIMELINE)
     t_to = min(t_to, total)
     print(f'总长 {total:.1f} 秒，输出 {t_from:.1f}–{t_to:.1f}')
+    mixed = mix_audio(music, TIMELINE)
     ff = subprocess.Popen(['ffmpeg', '-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-s', f'{W}x{H}',
                            '-r', str(FPS), '-i', '-', '-ss', str(t_from), '-t', str(t_to - t_from),
-                           '-i', os.path.join(HERE, music),
+                           '-i', mixed,
                            '-map', '0:v', '-map', '1:a', '-c:v', 'libx264', '-preset', 'slow', '-crf', '17',
                            '-pix_fmt', 'yuv420p', '-movflags', '+faststart', '-c:a', 'aac', '-b:a', '256k',
                            '-shortest', out], stdin=subprocess.PIPE)
@@ -649,6 +884,7 @@ def main():
         start = end
     ff.stdin.close()
     ff.wait()
+    os.remove(mixed)
     tmp = out + '.tmp.mp4'
     subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', out, '-i', os.path.join(HERE, COVER_PNG), '-map', '0', '-map', '1',
                     '-c', 'copy', '-c:v:1', 'mjpeg', '-disposition:v:1', 'attached_pic', '-movflags', '+faststart', tmp],
