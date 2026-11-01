@@ -858,6 +858,7 @@ void pollTouch(uint32_t now) {
 
 // ---------- 主流程 ----------
 void setup() {
+  batBootGuard();  // 电池快没电就直接深睡，不开屏幕和喇叭
   Serial.setTxBufferSize(16384);  // 录屏时一次要发几十 KB
   Serial.setRxBufferSize(16384);  // magpie 消息一条 1~2KB，画一帧期间要能存得下
   Serial.begin(115200);

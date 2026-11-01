@@ -17,6 +17,34 @@ void batInit() {
   analogSetPinAttenuation(BAT_PIN, ADC_11db);  // 量程约 0~3.1V，满电 4.2V 分压后约 2.43V
 }
 
+float batRead() {
+  uint32_t mv = 0;
+  for (int i = 0; i < 64; i++) mv += analogReadMilliVolts(BAT_PIN);
+  return mv / 64.0f / 1000.0f * BAT_K;
+}
+
+// 低电量保护：电池快没电时一开屏幕 / Wi-Fi，升压芯片就扛不住，板子反复掉电重启，每次重启喇叭都「滴」一声。
+// 所以电压太低就关背光、深睡，每分钟醒来量一次（插上 USB 后读数回到 4.2V 左右，就正常开机）。
+// 开机门槛比运行时的关机线高一点：卸掉负载后电池电压会回弹，免得刚开机又掉下去来回循环。
+const float BAT_CUT_V = 3.30f, BAT_BOOT_V = 3.45f;
+
+void batSleep() {
+  pinMode(GFX_BL, OUTPUT);
+  digitalWrite(GFX_BL, LOW);
+  gpio_hold_en((gpio_num_t)GFX_BL);  // 深睡时背光脚保持低电平
+  gpio_deep_sleep_hold_en();
+  esp_sleep_enable_timer_wakeup(60ULL * 1000000);
+  esp_deep_sleep_start();
+}
+
+// setup 一开始调用，此时屏幕、喇叭、Wi-Fi 都还没上电
+void batBootGuard() {
+  gpio_hold_dis((gpio_num_t)GFX_BL);
+  batInit();
+  float v = batRead();
+  if (v > 2.8f && v < BAT_BOOT_V) batSleep();  // 低于 2.8V 读数不可信（没接电池等），照常开机
+}
+
 // 单节锂电的放电曲线（带载电压 → 电量），中间段很平，只能当大概
 int batPctOf(float v) {
   static const float V[] = {3.30, 3.50, 3.61, 3.67, 3.71, 3.75, 3.80, 3.86, 3.92, 4.00, 4.10, 4.20};
@@ -31,13 +59,12 @@ int batPctOf(float v) {
 void batTick(uint32_t now) {
   if (batAt && now - batAt < 1000) return;
   batAt = now;
-  uint32_t mv = 0;
-  for (int i = 0; i < 64; i++) mv += analogReadMilliVolts(BAT_PIN);
-  float v = mv / 64.0f / 1000.0f * BAT_K;
+  float v = batRead();
   batV = batV == 0 ? v : batV * 0.9f + v * 0.1f;
   batUsb = HWCDC::isPlugged();
   batHas = !batUsb && batV > 2.8f && batV < 4.5f;
   batPct = batHas ? batPctOf(batV) : -1;
+  if (batHas && batV < BAT_CUT_V && now > 15000) batSleep();  // 开机先等平滑稳定，单次纹波不会触发
 
   if (now - batLogAt >= 30000 || !batLogAt) {  // bridge 日志里留一份（只在插着 USB 时看得到）
     batLogAt = now;

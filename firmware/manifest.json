@@ -9,8 +9,8 @@
     "TAMC_GT911@1.0.2",
     "ArduinoJson@7.4.3"
   ],
-  "built": "2026-10-31T21:48:20+08:00",
-  "commit": "23f1dfc",
+  "built": "2026-11-01T08:54:31+08:00",
+  "commit": "54fd2c0+dirty",
   "parts": [
     [
       "0x0",
