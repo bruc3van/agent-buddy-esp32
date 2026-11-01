@@ -74,10 +74,10 @@ These are the exact parts the author bought. Prices are what was paid on Pinduod
 | Microphone | `INMP441` | Headers pre-soldered | ¥15.8 | **P3** (power from **P4**) | Music beats, whether you are talking |
 | Speaker | `2030 speaker` | 2030 oval, 8Ω 0.5–2W, **2-pin 1.25mm plug**, 160mm lead | ¥5.4 | **Speak** | Sound effects and spoken alerts |
 | Li-ion battery | `603450 lipo` | 3.7V 1200mAh, **1.25mm 2-pin plug** | ¥13.86 | **BAT** | Runs without USB; charges while USB is plugged in |
-| Adapter cables | `MX1.25 4P to Dupont` | 20cm, pack of 5 | ¥10.56 | P1 / P3 / P4 | Turn the board's 1.25mm ports into Dupont headers for the mic and radar |
+| Adapter cables | `MX1.25 4P to Dupont` | 20cm, pack of 5 (only 1 actually used) | ¥10.56 | P1 / P3 / P4 | Turn the board's 1.25mm ports into Dupont headers for the mic and radar |
 | Dupont wires | `Dupont wire 20cm` | Male-to-male, strip of 10 | ¥2.47 | — | Join the radar kit cable (female) to the adapter cable (female) |
 
-Optional parts total about **¥76** (≈ US$11); with the board, the full set is about **¥175** (≈ US$25). The case can be 3D-printed ([two color schemes](#3d-printed-case)), about 160 g of PLA in total; STL files are in [`case/stl/`](case/stl).
+Optional parts total about **¥76** (≈ US$11); with the board, the full set is about **¥175** (≈ US$25). The adapter and Dupont cables come in packs; only a few of them end up in the build. The case can be 3D-printed ([two color schemes](#3d-printed-case)), about 160 g of PLA in total; STL files are in [`case/stl/`](case/stl).
 
 Notes:
 - **Check the battery polarity before plugging it in** — some sellers wire red / black the opposite way from the board's BAT port. Press **SW1** on the board once to power on.
