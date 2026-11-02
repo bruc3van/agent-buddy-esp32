@@ -279,16 +279,23 @@ int drawAboutPane(int y) {
   int ry;
   if (batHas || batUsb) {
     y = setGroupHead("电源", y);
+    // 上次续航：从拔掉 USB 到低电量关机（hw_bat.ino）
+    String life = batLifeSec ? fmtDuration(batLifeSec) + (batLifePct >= 0 ? "（从 " + String(batLifePct) + "% 起）" : String("")) : String("");
+    int lifeRow = batLifeSec ? 1 : 0;
     if (batHas) {
-      pxPanel(SET_PX, y, SET_PW, 3 * 30 + 4, P_PANEL, P_EDGE, true);
+      pxPanel(SET_PX, y, SET_PW, (4 + lifeRow) * 30 + 4, P_PANEL, P_EDGE, true);
       ry = y + 2;
       ry = setInfoRow("电量", String(batPct) + "%（大概）", ry, true);
       ry = setInfoRow("电压", String(batV, 2) + " V", ry, false);
       ry = setInfoRow("状态", batState(), ry, false);
+      uint32_t run = batRunSec(millis());
+      ry = setInfoRow("本次已用", run ? fmtDuration(run) : String("—"), ry, false);
+      if (lifeRow) ry = setInfoRow("上次续航", life, ry, false);
       y = ry + 10;
     } else {  // 插着 USB：读不出有没有电池，见 hw_bat.ino
-      pxPanel(SET_PX, y, SET_PW, 30 + 4, P_PANEL, P_EDGE, true);
+      pxPanel(SET_PX, y, SET_PW, (1 + lifeRow) * 30 + 4, P_PANEL, P_EDGE, true);
       ry = setInfoRow("状态", batState(), y + 2, true);
+      if (lifeRow) ry = setInfoRow("上次续航", life, ry, false);
       y = setFootnote("接了电池会顺便充电；拔掉 USB 后显示电量", ry);
     }
     y = setGroupHead("设备", y);

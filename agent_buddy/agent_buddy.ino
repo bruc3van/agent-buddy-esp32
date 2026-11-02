@@ -900,6 +900,7 @@ void setup() {
   micStart();   // 麦克风：常开
   radarInit();  // 毫米波雷达（P1），给 Clawd 的声音反应用
   batInit();    // 锂电池电压（GPIO5）
+  batLifeLoad();  // 上次续航
 
   modeSince = millis();
 }

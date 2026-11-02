@@ -80,7 +80,7 @@ These are the exact parts the author bought. Prices are what was paid on Pinduod
 Optional parts total about **¥76** (≈ US$11); with the board, the full set is about **¥175** (≈ US$25). The adapter and Dupont cables come in packs; only a few of them end up in the build. The case can be 3D-printed ([two color schemes](#3d-printed-case)), about 160 g of PLA in total; STL files are in [`case/stl/`](case/stl).
 
 Notes:
-- **Check the battery polarity before plugging it in** — some sellers wire red / black the opposite way from the board's BAT port. Press **SW1** on the board once to power on.
+- **Check the battery polarity before plugging it in** — some sellers wire red / black the opposite way from the board's BAT port. Press **SW1** on the board once to power on; double-press it within 1 second to power off (it does nothing while USB is plugged in).
 - Swapped radar TX / RX is fine; the firmware tries both.
 - Everything optional can be left out: no speaker means no sound, and without a microphone or radar it falls back to keyboard / mouse idle time on your computer. Pin-outs are in the [manual (Chinese)](docs/使用手册.md#配件接线可选).
 
