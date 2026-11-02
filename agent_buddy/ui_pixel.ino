@@ -242,18 +242,21 @@ void pxRing(int cx, int cy, int left) {
   pxText(s, cx - pxW(s, 1) / 2, cy + 4, low ? 0xFC08 : P_TEXT, 1);
 }
 
-// 像素对话气泡（替代圆角气泡）：白底，四角两级台阶圆角，左下一条斜着指向角色的小尾巴
+// 像素对话气泡：和面板一样的深色底、2px 细边、切角，左下一条台阶状的小尾巴（同样描边）斜着指向角色
 void bubblePx(int x, int y, int w, int h, uint16_t border) {
-  uint16_t edge = border == C_CLAUDE ? C_CLAUDE : 0xFFFF;
-  if (edge == 0xFFFF) {
-    gfx->fillRect(x + 4, y, w - 8, h, 0xFFFF);
-    gfx->fillRect(x + 2, y + 1, w - 4, h - 2, 0xFFFF);
-    gfx->fillRect(x + 1, y + 2, w - 2, h - 4, 0xFFFF);
-    gfx->fillRect(x, y + 4, w, h - 8, 0xFFFF);
-  } else {
-    pxPanel(x, y, w, h, 0xFFFF, edge, false);
+  uint16_t edge = border == C_GREY ? P_DIM : border;
+  pxPanel(x, y, w, h, P_PANEL, edge, false);
+  pxBubbleTail(x + 12, y + h, edge);
+}
+
+// 气泡尾巴：从底边（yb 是气泡下沿）打通，往左下收成尖，尖在 tx - 8 ~ tx - 4
+void pxBubbleTail(int tx, int yb, uint16_t edge) {
+  for (int k = 0; k < 5; k++) {  // 每级 2px 高：左边往左挪 2px、右边往左挪 4px
+    int l = tx - 2 * k, r = tx + 10 - 4 * k, yk = yb - 2 + 2 * k;
+    if (r > l + 2) gfx->fillRect(l + 2, yk, r - l - 2, 2, P_PANEL);
+    gfx->fillRect(l, yk, 2, 2, edge);
+    if (r > l) gfx->fillRect(r, yk, 2, 2, edge);
   }
-  for (int k = 0; k < 3; k++) gfx->fillRect(x + 12 - k * 3, y + h + k * 3, 9 - k * 3, 3, 0xFFFF);  // 尾巴：9 / 6 / 3 宽，往左下收尖
 }
 
 // ---------- 首页 ----------

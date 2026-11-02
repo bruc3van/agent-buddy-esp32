@@ -396,14 +396,24 @@ void drawMonitor(uint32_t now) {
 void drawSceneClawd(uint32_t now) {
   Pose p;
   Mode m = mode;
-  if (pokeUntil > now) m = M_DONE;
+  uint32_t t = now - modeSince;
+  if (dbgMode >= 0 && now < dbgUntil) { m = (Mode)dbgMode; t = now - (dbgUntil - 15000); }  // 调试：/ui?cmode=N
+  if (pokeUntil > now) { m = M_DONE; t = now - (pokeUntil - 1800); }
   int react = clawdReact(m, now);
   if (react == R_SLEEP) { m = M_SLEEP; react = R_NONE; }
   else if (react) m = M_IDLE;
-  bool blink = (now % 3700) < 140;
   int oU = U, oCX = CX, oBASE = BASE;
   U = 5; CX = 100; BASE = DESK_Y;  // 和喜鹊、鱼缸里的小鲸鱼差不多大
   int top = BASE - 8 * U;
+  // 思考 / 干活 / 完成 / 出错：和 Buddy 页一样照官方逐帧动作（ui_clawd.ino）；干活时侧身对着右边的显示器敲，不画笔记本
+  if (m == M_THINKING || m == M_WORKING || m == M_DONE || m == M_ERROR) {
+    if (m == M_THINKING) drawClawdThink(t);
+    else if (m == M_WORKING) drawClawdLaptop(now, 0, false);
+    else if (m == M_DONE) drawClawdJump(t);
+    else drawClawdSad(t);
+    U = oU; CX = oCX; BASE = oBASE;
+    return;
+  }
   switch (m) {
     case M_OFFLINE: p.color = C_GREY; p.eye = 1; break;
     case M_SLEEP:
@@ -414,20 +424,6 @@ void drawSceneClawd(uint32_t now) {
         pxText("z", CX + 4 * U + i * 7 + (int)(zt / 150), top - (int)(zt / 60) - i * 4, P_DIM, 1 + (i == 2));
       }
       break;
-    case M_THINKING:  // 同官方：眯眼往上想（思考的星芒在显示器上）
-      p.dy = ((now / 700) % 2) ? -1 : 0;
-      p.lookX = U / 4; p.lookY = -U / 2; p.armR = 1;
-      p.eye = 1;
-      break;
-    case M_WORKING: {  // 同官方 Laptop：站定盯着显示器，两手交替敲
-      int ph = (now / 140) % 4;
-      p.dy = (ph % 2) ? 1 : 0;
-      p.armL = ph == 0 ? 1 : 0;
-      p.armR = ph == 2 ? 1 : 0;
-      p.lookX = U / 2; p.lookY = U / 2;
-      p.eye = blink ? 1 : 0;
-      break;
-    }
     case M_WAITING: {  // 举手挥舞，头顶感叹号
       int ph = (now / 250) % 2;
       p.armL = ph ? 2 : 1; p.armR = ph ? 1 : 2;
@@ -437,33 +433,12 @@ void drawSceneClawd(uint32_t now) {
       gfx->fillRect(CX + 4 * U, top - 7, 4, 4, c);
       break;
     }
-    case M_DONE: {
-      float s = (now % 900) / 900.0f;
-      p.dy = -(int)(20 * 4 * s * (1 - s));
-      p.armL = p.armR = 2;
-      p.eye = 2;
-      for (int i = 0; i < 4; i++) {
-        if (((now / 150) + i) % 3 == 0) continue;
-        int sx = CX - 42 + i * 28, sy = top - 20 + (i * 13) % 20;
-        gfx->fillRect(sx - 1, sy - 5, 3, 11, i % 2 ? C_YELLOW : C_WHITE);
-        gfx->fillRect(sx - 5, sy - 1, 11, 3, i % 2 ? C_YELLOW : C_WHITE);
-      }
-      break;
-    }
-    case M_ERROR:
-      p.dx = ((now / 60) % 2) ? -2 : 2;
-      p.eye = 3;
-      break;
     case M_COMPACT:
       p.squash = 3 + (int)(3 * sinf(now / 250.0f));
       p.eye = 1;
       break;
-    default: {  // 待命：同官方，身子不动，只有眼神左右上下转
-      static const int8_t LX[8] = {0, 0, 1, 1, 0, -1, -1, 0}, LY[8] = {0, 0, 0, 0, -1, 0, 0, 0};
-      uint32_t ph = (now / 900) % 8;
-      p.lookX = LX[ph] * U / 2; p.lookY = LY[ph] * U / 2;
-      p.eye = blink ? 1 : 0;
-    }
+    default:  // 待命：同官方，身子不动，眼睛慢慢转一圈
+      clawdLookAround(now, p.lookX, p.lookY);
   }
   reactPre(p, react, now);
   drawClawd(p);
@@ -498,10 +473,10 @@ void drawGreeting(uint32_t now) {
   int w = max(pxW(l1, 1), pxW(l2, 1)) + 24;
   // 气泡底边离 Clawd 头顶（约 y=160）留出一条尾巴的长度，尾巴尖落在头顶正上方（Clawd 中线 x=100）
   int x = 14, y = 94;
-  pxPanel(x, y, w, 50, 0xFFFF, 0xFFFF, false);
-  for (int k = 0; k < 4; k++) gfx->fillRect(104 - k * 2, y + 50 + k * 3, 10 - k * 2, 3, 0xFFFF);  // 尾巴：往左下收尖，尖在 x≈100
-  pxText(l1, x + 12, y + 21, C_BLACK, 1);
-  pxText(l2, x + 12, y + 40, backWait ? 0xC300 : 0x4208, 1);
+  pxPanel(x, y, w, 50, P_PANEL, P_DIM, false);  // 和其它气泡一样：深色底、细边
+  pxBubbleTail(106, y + 50, P_DIM);  // 尾巴尖在 x≈100
+  pxText(l1, x + 12, y + 21, P_TEXT, 1);
+  pxText(l2, x + 12, y + 40, backWait ? C_CLAUDE : P_DIM, 1);
 }
 
 // ---------- 底部组件 ----------

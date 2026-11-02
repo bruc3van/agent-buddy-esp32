@@ -44,6 +44,7 @@ uint32_t macKeys[32] = {0};  // Mac 上最近 32 次按键的时间（bridge 实
 uint32_t macKeyN = 0, macLastKeyAt = 0;
 uint32_t dbgUntil = 0;  // 调试：强制显示某个反应 / 待机时钟（{"t":"ui","react":3} / {"t":"ui","standby":1}）
 int dbgReact = 0;
+int dbgMode = -1;  // 调试：强制 Clawd 显示某个状态（Mode 的编号）15 秒，录屏 / 截图核对动作用
 bool dbgStandby = false;
 bool dbgRadarDemo = false;  // 调试：雷达演示数据（{"t":"ui","rdemo":1}，15 秒）
 

@@ -256,8 +256,9 @@ void handleLine(const String &line) {
     if (doc["mic"].is<int>()) micBar = (int)doc["mic"] == 1;  // 麦克风调试：串口报音量
     if (doc["vol"].is<int>() && !doc["beep"].is<int>()) spkSetVolume(doc["vol"]);  // 喇叭音量 0~100
     settingsFromJson(doc);
-    if (doc["react"].is<int>() || doc["standby"].is<int>() || doc["rdemo"].is<int>()) {  // 调试：强制显示 15 秒
+    if (doc["react"].is<int>() || doc["standby"].is<int>() || doc["rdemo"].is<int>() || doc["cmode"].is<int>()) {  // 调试：强制显示 15 秒
       dbgReact = doc["react"] | 0;
+      dbgMode = doc["cmode"] | -1;
       dbgStandby = (doc["standby"] | 0) == 1;
       dbgRadarDemo = (doc["rdemo"] | 0) == 1;
       dbgUntil = millis() + 15000;
@@ -444,19 +445,30 @@ void iconTerminal(int x, int y, uint32_t t) {
   if ((t / 400) % 2) gfx->fillRect(x + 18, y + 24, 9, 3, C_GREEN);
 }
 
+// 纸页：深色底、2px 描边、右上折角（放在深色气泡里，不再是一大块白）
+void pxPage(int x, int y, int w, int h) {
+  gfx->fillRect(x, y, w, h, P_BG);
+  gfx->fillRect(x, y, w - 8, 2, P_DIM);
+  gfx->fillRect(x, y, 2, h, P_DIM);
+  gfx->fillRect(x, y + h - 2, w, 2, P_DIM);
+  gfx->fillRect(x + w - 2, y + 8, 2, h - 8, P_DIM);
+  for (int k = 0; k < 4; k++) gfx->fillRect(x + w - 8 + k * 2, y + k * 2, 2, 2, P_DIM);  // 折角的斜边
+  gfx->fillRect(x + w - 8, y + 6, 8, 2, P_DIM);
+  gfx->fillRect(x + w - 8, y, 2, 8, P_DIM);
+}
+
 void iconDoc(int x, int y, uint32_t t) {
-  gfx->fillRect(x + 6, y, 40, 46, C_WHITE);
-  gfx->drawRect(x + 6, y, 40, 46, C_GREY);
+  pxPage(x + 8, y, 38, 46);
   int lines = (t / 250) % 5 + 1;
-  for (int i = 0; i < lines; i++) gfx->fillRect(x + 11, y + 6 + i * 8, 30 - (i % 2) * 10, 3, C_BLUE);
+  for (int i = 0; i < lines; i++) gfx->fillRect(x + 14, y + 10 + i * 7, 24 - (i % 2) * 8, 3, C_BLUE);
 }
 
 void iconSearch(int x, int y, uint32_t t) {
   int ox = (int)(6 * sin(t / 300.0));
-  gfx->fillRect(x + 4, y + 2, 40, 44, C_WHITE);
-  for (int i = 0; i < 5; i++) gfx->fillRect(x + 9, y + 8 + i * 8, 28, 3, C_GREY);
-  for (int k = 0; k < 3; k++) gfx->drawCircle(x + 22 + ox, y + 20, 11 - k, C_BLACK);
-  for (int k = 0; k < 4; k++) gfx->drawLine(x + 29 + ox + k, y + 29, x + 40 + ox + k, y + 42, C_BLACK);
+  pxPage(x + 4, y + 2, 38, 44);
+  for (int i = 0; i < 4; i++) gfx->fillRect(x + 10, y + 12 + i * 8, 24 - (i % 2) * 8, 3, P_EDGE);
+  for (int k = 0; k < 3; k++) gfx->drawCircle(x + 24 + ox, y + 21, 10 - k, P_TEXT);  // 放大镜扫过纸面
+  for (int k = 0; k < 3; k++) gfx->drawLine(x + 30 + ox + k, y + 29, x + 40 + ox + k, y + 40, P_TEXT);
 }
 
 void iconGlobe(int x, int y, uint32_t t) {
@@ -506,7 +518,14 @@ void drawCharacterScene(uint32_t now) {
   uint32_t t = now - modeSince;
   Pose p;
   Mode m = mode;
-  if (pokeUntil > now) m = M_DONE;
+  if (dbgMode >= 0 && now < dbgUntil) {  // 调试：/ui?cmode=N
+    m = (Mode)dbgMode;
+    t = now - (dbgUntil - 15000);
+  }
+  if (pokeUntil > now) {  // 被点：开心跳一下，从头开始跳
+    m = M_DONE;
+    t = now - (pokeUntil - 1800);
+  }
 
   // 对你的反应（hw_act.ino）：只在空闲 / 睡觉时生效
   int react = clawdReact(m, now);
@@ -517,9 +536,6 @@ void drawCharacterScene(uint32_t now) {
     m = M_IDLE;  // 先按空闲姿势画，再叠加动作
   }
 
-  // 每隔一段时间眨眼
-  bool blink = (now % 3700) < 140;
-
   switch (m) {
     case M_OFFLINE:
       p.color = C_GREY;
@@ -527,15 +543,9 @@ void drawCharacterScene(uint32_t now) {
       p.dy = (int)(2 * sin(now / 900.0));
       break;
 
-    case M_IDLE: {
-      // 同官方 LookingAroundEyesOnly：身子不动，只有眼神在变——看左、看右、往上瞟，偶尔眨眼
-      static const int8_t LX[8] = {0, 0, -1, -1, 0, 1, 1, 0}, LY[8] = {0, 0, 0, 0, -1, 0, 0, 0};
-      uint32_t ph = (now / 900) % 8;
-      p.lookX = LX[ph] * U / 2;
-      p.lookY = LY[ph] * U / 2;
-      p.eye = blink ? 1 : 0;
+    case M_IDLE:  // 同官方 LookingAroundEyesOnly：身子不动，眼睛慢慢转一圈（ui_clawd.ino）
+      clawdLookAround(now, p.lookX, p.lookY);
       break;
-    }
 
     case M_SLEEP: {
       p.dy = (int)(4 * sin(now / 1200.0));
@@ -555,83 +565,41 @@ void drawCharacterScene(uint32_t now) {
       break;
     }
 
-    case M_THINKING: {
-      // 同官方 Thinking：眯起眼往上想，头顶一个蓝色对话泡，里面的点一个一个冒出来
-      p.lookY = -U / 2;
-      p.lookX = U / 4;
-      p.armR = 1;
-      p.eye = 1;
-      p.dy = ((now / 700) % 2) ? -2 : 0;
-      const uint16_t C_THINK = 0x6CD9;  // 官方蓝 #699ACB
-      int bx = CX + 34, by = 50 + (((now / 700) % 2) ? -2 : 0), bw = 70, bh = 40;
-      gfx->fillRect(bx + 4, by, bw - 8, bh, C_THINK);  // 像素圆角
-      gfx->fillRect(bx, by + 4, bw, bh - 8, C_THINK);
-      gfx->fillRect(bx + 10, by + bh, 10, 6, C_THINK);  // 小尾巴
-      gfx->fillRect(bx + 6, by + bh + 6, 6, 4, C_THINK);
-      int nd = (now / 450) % 4;
-      for (int i = 0; i < 3; i++)
-        if (i < nd) gfx->fillRect(bx + 15 + i * 16, by + bh / 2 - 4, 8, 8, C_BG);
-      break;
-    }
+    // 思考 / 干活 / 完成 / 出错：照官方逐帧动作重画（ui_clawd.ino），不走下面的通用姿势
+    case M_THINKING:  // 同官方 Thinking：仰头托腮、头顶冒蓝色对话泡，点一个一个冒出来
+      drawClawdThink(t);
+      return;
 
-    case M_WORKING: {
-      // 同官方 Laptop：站定，低头盯着右前方，两只手交替敲；每敲一下身子轻轻一顿
-      int ph = (now / 140) % 4;
-      p.dy = (ph % 2) ? 1 : 0;
-      p.armL = ph == 0 ? 1 : 0;
-      p.armR = ph == 2 ? 1 : 0;
-      p.lookX = U / 2;
-      p.lookY = U / 2;
-      p.eye = blink ? 1 : 0;
-      bubble(CX + 30, 46, 64, toolIsTerminal(tool) ? 49 : 55, C_GREY);  // 贴着工具图标（终端 56×40，其它最大 56×46）留 4px 白边
+    case M_WORKING:  // 同官方 Laptop：侧身坐着敲笔记本；正在用的工具放在右上的小气泡里
+      drawClawdLaptop(now, -3, true);
+      bubble(CX + 30, 46, 64, toolIsTerminal(tool) ? 50 : 56, C_GREY);  // 贴着工具图标（终端 56×40，其它最大 56×46）留 4px
       drawToolIcon(CX + 34, 51, now, tool);
-      break;
-    }
+      return;
 
     case M_WAITING: {
-      // 举手挥舞，头顶感叹号闪烁，屏幕边框闪橙色
+      // 举手挥舞，头顶气泡里一个像素感叹号闪烁，屏幕边框闪橙色（官方没有这个动作）
       int ph = (now / 250) % 2;
       p.armL = ph ? 2 : 1;
       p.armR = ph ? 1 : 2;
       p.dy = ph ? -4 : 0;
       p.eye = 0;
-      bubble(CX + 36, 44, 54, 62, C_CLAUDE);
-      gfx->fillRoundRect(CX + 57, 52, 12, 32, 4, (now / 400) % 2 ? C_CLAUDE : C_RED);
-      gfx->fillCircle(CX + 63, 94, 6, (now / 400) % 2 ? C_CLAUDE : C_RED);
+      bubble(CX + 40, 44, 46, 58, C_CLAUDE);
+      uint16_t c = (now / 400) % 2 ? C_CLAUDE : C_RED;
+      gfx->fillRect(CX + 58, 54, 10, 26, c);
+      gfx->fillRect(CX + 58, 86, 10, 8, c);
       if ((now / 500) % 2) {
         for (int k = 0; k < 4; k++) gfx->drawRect(k, k, 480 - 2 * k, 272 - 2 * k, C_CLAUDE);
       }
       break;
     }
 
-    case M_DONE: {
-      // 跳起来 + ^^ + 星星
-      uint32_t jt = t % 900;
-      float s = jt / 900.0;
-      p.dy = -(int)(60 * 4 * s * (1 - s));
-      p.armL = p.armR = 2;
-      p.eye = 2;
-      if (p.dy > -8) p.squash = 4;
-      for (int i = 0; i < 6; i++) {
-        if (((now / 150) + i) % 3 == 0) continue;
-        int sx = CX - 110 + (i * 47) % 220;
-        int sy = 54 + (i * 31) % 70;
-        uint16_t c = (i % 2) ? C_YELLOW : C_WHITE;
-        gfx->fillRect(sx - 1, sy - 7, 3, 15, c);
-        gfx->fillRect(sx - 7, sy - 1, 15, 3, c);
-      }
-      break;
-    }
+    case M_DONE:  // 同官方 JumpingHappy：下蹲、双手举过头顶蹦起来、^^、落地压扁
+      drawClawdJump(t);
+      return;
 
-    case M_ERROR: {
-      p.dx = ((now / 60) % 2) ? -4 : 4;
-      p.eye = 3;
-      // 汗滴
-      int dy = (now / 40) % 30;
-      gfx->fillCircle(CX + 80, 96 + dy, 7, C_BLUE);
-      gfx->fillTriangle(CX + 73, 94 + dy, CX + 87, 94 + dy, CX + 80, 80 + dy, C_BLUE);
-      break;
-    }
+    case M_ERROR:  // 同官方 Disappointed：眯眼、皱眉、耸肩、垮下去摇摇头
+      drawClawdSad(t);
+      return;
 
     case M_COMPACT: {
       // 一挤一挤地压缩
