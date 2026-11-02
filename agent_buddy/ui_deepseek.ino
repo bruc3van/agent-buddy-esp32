@@ -75,7 +75,7 @@ void drawWhale(int cx, int base, int s, const DsPose &p, uint32_t now) {
   auto X = [&](int c) { return x0 + (p.flip ? 31 - c : c) * s; };
   auto px = [&](int c, int r, uint16_t col) { gfx->fillRect(X(c), y0 + r * s + off[c], s, s, col); };
   for (int r = 0; r < 19; r++) {
-    const char *row = r < 4 ? DS_FLUKE[p.fluke][r] : DS_WHALE[r];
+    const char *row = r < DS_FLUKE_ROWS ? DS_FLUKE[p.fluke][r] : DS_WHALE[r];
     for (int c = 0; c < 32; c++)
       if (row[c] != '.') px(c, r, dsColor(row[c], p.grey));
   }
@@ -104,7 +104,7 @@ void drawWhale(int cx, int base, int s, const DsPose &p, uint32_t now) {
     }
   }
   if (p.blush) { px(11, 12, 0xFCD6); px(12, 12, 0xFCD6); }
-  if (p.spout) drawSpout(X(12) + s / 2, y0 + 4 * s, s, p.spout, now);
+  if (p.spout) drawSpout(X(12) + s / 2, y0 + 5 * s, s, p.spout, now);
 }
 
 // 各状态的姿势（鱼缸、待机时钟和 Buddy 页共用）。wave / wph：游动的摆幅（贴图像素）和相位
@@ -196,7 +196,7 @@ void drawDeepSeekAt(int cx, int base, int s, int m, uint32_t now, bool flip) {
     for (int i = 0; i < 3; i++) {
       uint32_t zt = (now + i * 900) % 2700;
       int zx = hx + (flip ? 1 : -1) * (i * 2 * s + (int)(zt / 150));
-      pxText("z", zx, max(56, y0 + 4 * s - (int)(zt / 150) - i * 4), P_DIM, 1 + (i == 2 && s >= 3));
+      pxText("z", zx, max(56, y0 + 5 * s - (int)(zt / 150) - i * 4), P_DIM, 1 + (i == 2 && s >= 3));
     }
 }
 
@@ -376,7 +376,7 @@ void dsTank(int x, int y, int w, int h, int wy, int s, int base, uint32_t now) {
   int surge = rest ? 0 : (int)(0.8f * s * sinf(ref.wph)) * (flip ? 1 : -1);
   int wx = still ? x + w / 2 : x + w / 2 + (int)((u - 0.5f) * 2 * range) + surge;
   // 纵向：平时在 base 深度；浮上水面喷水（背露出水面），或者冲出水面
-  int surfB = wy + 14 * s;                          // 浮在水面：喷水孔刚好露出来
+  int surfB = wy + 13 * s;                          // 浮在水面：喷水孔刚好露出来
   int jumpH = max(0, surfB - (y + 2 + 19 * s));     // 跳起来最高到缸口
   int wb = rest ? base + s : base;
   float tilt = 0;

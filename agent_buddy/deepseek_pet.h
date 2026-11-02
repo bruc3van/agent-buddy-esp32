@@ -1,6 +1,6 @@
 // DeepSeek 的小鲸鱼（照 DeepSeek logo 的蓝鲸：头朝左、尾巴往上卷），手工整理成 32×19 的像素图
 // 眼睛、胸鳍、尾鳍、喷水由程序画，所以能有表情和动作。
-// 字母：K 描边 / B 蓝 / D 暗蓝 / L 肚皮；尾鳍（第 0~3 行）单独两帧，摆尾时交替
+// 字母：K 描边 / B 蓝 / D 暗蓝 / L 肚皮；尾鳍（第 0~4 行）单独两帧，摆尾时交替
 #pragma once
 #include <Arduino.h>
 
@@ -16,33 +16,36 @@ const char *const DS_WHALE[19] = {
   "................................",
   "................................",
   "................................",
-  "...........KKKKKKK.........KBBK.",
-  ".........KKBBBBBBBKK.......KBBK.",
-  ".......KKBBBBBBBBBBBKK....KBBK..",
-  "......KBBBBBBBBBBBBBBBK..KBBBK..",
-  ".....KBBBBBBBBBBBBBBBBBBKBBBK...",
+  "................................",
+  "...........KKKKKKK.....KBBBBK...",
+  ".........KKBBBBBBBKK...KBBBBK...",
+  ".......KKBBBBBBBBBBBKK.KBBBBK...",
+  "......KBBBBBBBBBBBBBBBKBBBBBK...",
+  ".....KBBBBBBBBBBBBBBBBBBBBBK....",
   "....KBBBBBBBBBBBBBBBBBBBBBBK....",
-  "...KBBBBBBBBBBBBBBBBBBBBBBK.....",
-  "..KBBBBBBBBBBBBBBBBBBBBBDK......",
-  "..KBBBBBBBBBBBBBBBBBBBBDDK......",
-  ".KLLLBBBBBBBBBBBBBBBBBDDK.......",
-  ".KLLLLLLBBBBBBBBBBBBDDDK........",
-  "..KLLLLLLLLLLBBBBDDDDDK.........",
-  "...KLLLLLLLLLLLDDDDDKK..........",
-  "....KKLLLLLLLLLLKKKKK...........",
-  "......KKKKKKKKKK................",
+  "...KBBBBBBBBBBBBBBBBBBBBBBDK....",
+  "..KBBBBBBBBBBBBBBBBBBBBBBDDK....",
+  "..KBBBBBBBBBBBBBBBBBBBBBDDK.....",
+  ".KLLLBBBBBBBBBBBBBBBBBDDDK......",
+  ".KLLLLLLBBBBBBBBBBBBDDDDK.......",
+  "..KLLLLLLLLLLBBBBDDDDDKK........",
+  "...KKLLLLLLLLLLDDDDKKK..........",
+  ".....KKKKKKKKKKKKKK.............",
 };
 
-// 尾鳍：0 往上卷（同 logo），1 放平；画在第 0~3 行
-const char *const DS_FLUKE[2][4] = {
-  {"..........................KK.KK.",
-   ".........................KBBKBBK",
-   "..........................KBBBBK",
-   "...........................KBBK."},
+// 尾鳍：0 往上翘成 V 字（同 logo），1 放平；画在第 0~4 行，接在 4 格宽的尾柄上
+#define DS_FLUKE_ROWS 5
+const char *const DS_FLUKE[2][DS_FLUKE_ROWS] = {
+  {"..................KKK......KKK..",
+   ".................KBBBK....KBBBBK",
+   "..................KBBBK..KBBBBK.",
+   "...................KDBBBKBBBBDK.",
+   "....................KKDBBBBDKK.."},
   {"................................",
-   "............................KK..",
-   "..........................KKBBKK",
-   "...........................KBBBK"},
+   "................................",
+   ".................KKKKK...KKKKK..",
+   "................KBBBBBKKKBBBBBK.",
+   ".................KDDDBBBBBDDDK.."},
 };
 
 // 胸鳍：0 垂着（画在第 14 行、第 11 列）、1 举起来挥（第 11 行、第 11 列）
