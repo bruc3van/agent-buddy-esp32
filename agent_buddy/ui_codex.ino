@@ -165,7 +165,7 @@ CxPose codexPose(int m, uint32_t now, int s) {
   switch (m) {
     case M_OFFLINE: p.grey = true; p.face = CF_OFF; break;
     case M_SLEEP: p.face = CF_SLEEP; break;
-    case M_THINKING: p.face = CF_DOTS; p.armL = 5; break;  // 一只手托着下巴想
+    case M_THINKING:  // 官方没有单独的「思考」，推理时也是 running
     case M_WORKING: {  // 官方 running：坐着抱笔记本敲，表情 >_ ^^ ︶︶ || >_ ^^ 轮换
       static const uint16_t MS[6] = {120, 120, 120, 120, 120, 220};
       static const uint8_t F[6] = {CF_PROMPT, CF_HAPPY, CF_SLEEP, CF_EYES, CF_PROMPT, CF_HAPPY};
@@ -178,31 +178,31 @@ CxPose codexPose(int m, uint32_t now, int s) {
     case M_WAITING: {  // 官方 waiting：手托下巴，>_ || '' >_ >_ || 轮换，等你拿主意
       static const uint16_t MS[6] = {150, 150, 150, 150, 150, 260};
       static const uint8_t F[6] = {CF_PROMPT, CF_EYES, CF_LOOKUP, CF_PROMPT, CF_PROMPT, CF_EYES};
-      p.face = F[cxFrame(now / 2, MS, 6)];  // 放慢一倍：等待要持续很久，太快会晃眼
+      p.face = F[cxFrame(now, MS, 6)];
       p.armL = 5;
       break;
     }
-    case M_DONE: {  // 官方 review：>_ ^^，中间轻轻一跳挥手
+    case M_DONE: {  // 官方 review：>_ ^^，中间一跳双手举起
       static const uint16_t MS[6] = {150, 150, 150, 150, 150, 280};
       static const uint8_t F[6] = {CF_PROMPT, CF_HAPPY, CF_HAPPY, CF_PROMPT, CF_PROMPT, CF_HAPPY};
       int f = cxFrame(now, MS, 6);
       p.face = F[f];
-      if (f == 2) { p.dy = -2 * s; p.armR = 6; }
+      if (f == 2) { p.dy = -2 * s; p.armL = p.armR = 6; }
       break;
     }
-    case M_ERROR: {  // 官方 failed：双手抱头，>< ×× ≥≤ 轮换
+    case M_ERROR: {  // 官方 failed：>_ 叉腰 → >< 抱头 → ×× 放下手 → ≥≤ 抱头
       static const uint16_t MS[8] = {140, 140, 140, 140, 140, 140, 140, 240};
       static const uint8_t F[8] = {CF_PROMPT, CF_WINCE, CF_X, CF_SQUINT, CF_PROMPT, CF_WINCE, CF_X, CF_SQUINT};
       int f = cxFrame(now, MS, 8);
       p.face = F[f];
-      if (f) p.armL = p.armR = 7;
+      if (f % 2) p.armL = p.armR = 7;
       break;
     }
     case M_COMPACT: p.face = CF_SQUEEZE; p.dy = (int)(s * sinf(now / 250.0f)); break;
-    default: {  // 官方 idle：不跳动，>_ 和 ︶︶ 交替眨眼；每轮之间停一会儿，免得一直眨
-      static const uint16_t MS[7] = {280, 110, 110, 140, 140, 320, 3000};
-      static const uint8_t F[7] = {CF_PROMPT, CF_SLEEP, CF_PROMPT, CF_PROMPT, CF_PROMPT, CF_SLEEP, CF_PROMPT};
-      p.face = F[cxFrame(now, MS, 7)];
+    default: {  // 官方 idle：不跳动，>_ 和 ︶︶ 慢慢眨眼（桌面版待命时放慢 6 倍播）
+      static const uint16_t MS[6] = {280 * 6, 110 * 6, 110 * 6, 140 * 6, 140 * 6, 320 * 6};
+      static const uint8_t F[6] = {CF_PROMPT, CF_SLEEP, CF_PROMPT, CF_PROMPT, CF_PROMPT, CF_SLEEP};
+      p.face = F[cxFrame(now, MS, 6)];
       break;
     }
   }
@@ -212,18 +212,27 @@ CxPose codexPose(int m, uint32_t now, int s) {
 // 带表情的完整绘制（表情需要时间做动画）
 void drawCodexAt(int cx, int base, int s, int m, uint32_t now) {
   CxPose p = codexPose(m, now, s);
-  if (cxPokeUntil > now) {  // 被点：原地跳起来，一只手高高举起挥一挥
-    float k = ((now - (cxPokeUntil - 1800)) % 900) / 900.0f;
+  bool asleep = m == M_SLEEP;  // 头顶飘 z：只在真睡着时。︶︶ 也是待命 / 干活时的眨眼帧，不能按表情判断
+  if (cxPokeUntil > now) {  // 被点：官方 jumping（悬停时播）——下蹲、张手起跳、到顶举手、落下、站稳，连跳 3 次
+    asleep = false;
+    static const uint16_t MS[5] = {140, 140, 140, 140, 280};
+    static const int8_t DY[5] = {1, -4, -7, -3, 0}, AL[5] = {0, 2, 6, 1, 0}, AR[5] = {0, 2, 1, 1, 0};
+    int f = cxFrame(now - (cxPokeUntil - CX_POKE_MS), MS, 5);
     p = CxPose();
     p.face = CF_PROMPT;
-    p.dy = -(int)(s * 8 * 4 * k * (1 - k));
-    p.armR = (now / 150) % 2 ? 7 : 5;
-    p.armL = 1;
-  } else if ((m == M_IDLE || m == M_SLEEP) && backAt && now - backAt < 8000) {  // 欢迎回来：挥手
-    p.face = CF_HAPPY;
-    p.armR = (now / 220) % 2 ? 5 : 2;
+    p.dy = DY[f] * s;
+    p.armL = AL[f];
+    p.armR = AR[f];
+  } else if ((m == M_IDLE || m == M_SLEEP) && backAt && now - backAt < 8000) {  // 欢迎回来：官方 waving，>_ 不变，举左手挥两下
+    static const uint16_t MS[4] = {140, 140, 140, 280};
+    static const int8_t AL[4] = {0, 6, 5, 0};
+    p = CxPose();
+    p.face = CF_PROMPT;
+    p.armL = AL[cxFrame(now - backAt, MS, 4)];
+    asleep = false;
   } else if (m == M_IDLE && userAway()) {
     p.face = CF_SLEEP;
+    asleep = true;
   }
   drawCodex(cx, base, s, p);
   int x0 = cx - 16 * s + p.dx, y0 = base - 39 * s + p.dy + (p.sit ? 2 * s : 0);
@@ -232,7 +241,7 @@ void drawCodexAt(int cx, int base, int s, int m, uint32_t now) {
     int ly = base - 39 * s + p.dy + 29 * s, lx = cx - 16 * s + p.dx + (25 - 8 * 4 / 13 + 6) * s;
     gfx->fillRect(lx, ly, 2 * s, s, 0xAFFF);
   }
-  if (m == M_SLEEP || p.face == CF_SLEEP)
+  if (asleep)
     for (int i = 0; i < 3; i++) {
       uint32_t zt = (now + i * 900) % 2700;
       pxText("z", cx + 11 * s + i * 2 * s + (int)(zt / 150), max(56, y0 - (int)(zt / 150) - i * 4), P_DIM, 1 + (i == 2 && s >= 3));  // 不飘进 Buddy 页标题栏

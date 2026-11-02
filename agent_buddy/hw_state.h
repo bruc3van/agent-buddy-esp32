@@ -52,6 +52,7 @@ int cxMode = 0;  // Mode 枚举值（M_OFFLINE = 0）
 String cxLabel = "未连接", cxDetail = "";
 int cxSessions = 0;
 uint32_t cxModeSince = 0, cxTurnStart = 0, cxPokeUntil = 0;
+const uint32_t CX_POKE_MS = 3 * (4 * 140 + 280);  // 被点：官方 jumping 一轮 840ms，播 3 遍
 float cxH5Used = -1, cxD7Used = -1;
 uint32_t cxH5Reset = 0, cxD7Reset = 0;  // Codex 额度的重置时刻（epoch 秒，magpie 给的；0 = 不知道）
 String cxAcct = "";      // Codex 额度用的是哪个账号（magpie 打码设置照样生效）

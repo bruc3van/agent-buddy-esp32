@@ -768,7 +768,7 @@ void onTap(int x, int y, uint32_t now) {
       dsPokeUntil = now + 1800;
       sfxPlay("dpoke");
     } else if (buddyAgent == 1 && x < 250 && y > 60 && cxPokeUntil < now) {
-      cxPokeUntil = now + 1800;
+      cxPokeUntil = now + CX_POKE_MS;
       sfxPlay("cpoke");
     } else if (buddyAgent == 0 && x < 250 && y > 60 && pokeUntil < now) {  // 点角色：开心跳一下，啵一声
       pokeUntil = now + 1800;
