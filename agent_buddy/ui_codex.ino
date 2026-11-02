@@ -212,6 +212,7 @@ CxPose codexPose(int m, uint32_t now, int s) {
 // 带表情的完整绘制（表情需要时间做动画）
 void drawCodexAt(int cx, int base, int s, int m, uint32_t now) {
   CxPose p = codexPose(m, now, s);
+  int react = buddyReact(m, now);  // 对你的反应（hw_act.ino）：只在待命 / 睡觉时
   bool asleep = m == M_SLEEP;  // 头顶飘 z：只在真睡着时。︶︶ 也是待命 / 干活时的眨眼帧，不能按表情判断
   if (cxPokeUntil > now) {  // 被点：官方 jumping（悬停时播）——下蹲、张手起跳、到顶举手、落下、站稳，连跳 3 次
     asleep = false;
@@ -230,6 +231,28 @@ void drawCodexAt(int cx, int base, int s, int m, uint32_t now) {
     p.face = CF_PROMPT;
     p.armL = AL[cxFrame(now - backAt, MS, 4)];
     asleep = false;
+  } else if (react) {
+    asleep = false;
+    p = CxPose();
+    if (react == R_STARTLE) {  // 敲桌子 / 大声响：吓一跳，猛地蹦起来双手举高，> <，头顶冒感叹号
+      float k = min(1.0f, (now - micStartleAt) / 500.0f);
+      p.face = CF_WINCE;
+      p.dy = -(int)(6 * s * sinf(PI * k));
+      p.armL = p.armR = 6;
+    } else if (react == R_DANCE) {  // 放音乐：跟着节拍左右摇，两手轮流举起，^ ^
+      int side = (micOnsetN % 2) ? 1 : -1;
+      float k = min(1.0f, (now - micLastOnsetMs) / 300.0f);
+      p.face = CF_HAPPY;
+      p.dx = side * (int)(2 * s * (1 - 0.4f * k));
+      p.dy = -(int)(2 * s * (1 - k));
+      p.armL = side > 0 ? 6 : 0;
+      p.armR = side > 0 ? 0 : 6;
+    } else if (react == R_TYPE) {  // 你在敲键盘：坐下来抱着笔记本陪你一起敲
+      p = codexPose(M_WORKING, now, s);
+    } else {  // R_SHH 有人说话：安静下来，手托下巴听，眼睛往上瞟
+      p.face = (now % 4200) < 160 ? CF_SLEEP : CF_LOOKUP;
+      p.armL = 5;
+    }
   } else if (m == M_IDLE && userAway()) {
     p.face = CF_SLEEP;
     asleep = true;
@@ -237,6 +260,7 @@ void drawCodexAt(int cx, int base, int s, int m, uint32_t now) {
   drawCodex(cx, base, s, p);
   int x0 = cx - 16 * s + p.dx, y0 = base - 39 * s + p.dy + (p.sit ? 2 * s : 0);
   drawCodexFace(x0, y0, s, p.face, now, p.grey);
+  if (react == R_STARTLE) drawBang(x0 + 32 * s, max(56, y0 + 2 * s), max(2, s * 3 / 2), 5 * s);  // 不戳进 Buddy 页标题栏
   if (p.sit && (now / 250) % 2) {  // 笔记本屏幕上 > 后面的光标一闪一闪
     int ly = base - 39 * s + p.dy + 29 * s, lx = cx - 16 * s + p.dx + (25 - 8 * 4 / 13 + 6) * s;
     gfx->fillRect(lx, ly, 2 * s, s, 0xAFFF);

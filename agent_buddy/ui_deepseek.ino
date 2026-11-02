@@ -64,21 +64,28 @@ void drawSpout(int x, int y, int s, int level, uint32_t now) {
 }
 
 // cx：中心 x；base：肚皮底 y；s：每个贴图像素画多大。
-// 游动：每一列按一道往尾巴传的正弦波上下错开，越靠尾巴错得越多（头不动），像鲸鱼在水里摆尾；flip 时头朝右
+// 游动：每一列按一道往尾巴传的正弦波上下错开，越靠尾巴错得越多（头不动），像鲸鱼在水里上下拍尾；flip 时头朝右
 void drawWhale(int cx, int base, int s, const DsPose &p, uint32_t now) {
-  int x0 = cx - 16 * s + p.dx, y0 = base - 19 * s + p.dy;
-  int off[32];
-  for (int c = 0; c < 32; c++) {
-    float k = c > 10 ? powf((c - 10) / 21.0f, 1.6f) : 0;
-    off[c] = (int)lroundf(p.wave * s * k * sinf(p.wph - c * 0.22f) + p.tilt * (c - 16) * s);  // tilt > 0：尾巴往下、头往上
+  int x0 = cx - DS_W / 2 * s + p.dx, y0 = base - 19 * s + p.dy;
+  int off[DS_W];
+  for (int c = 0; c < DS_W; c++) {
+    float k = c > 10 ? powf((c - 10) / (float)(DS_W - 11), 1.6f) : 0;
+    off[c] = (int)lroundf(p.wave * s * k * sinf(p.wph - c * 0.22f) + p.tilt * (c - DS_W / 2) * s);  // tilt > 0：尾巴往下、头往上
   }
-  auto X = [&](int c) { return x0 + (p.flip ? 31 - c : c) * s; };
+  // 尾鳍跟着拍水的方向翻：尾巴往下拍时尾鳍上翘，往上拍时下压，到头时放平
+  int tf = 0;
+  if (p.curl) tf = 3;
+  else if (p.wave >= 1) {
+    float v = cosf(p.wph - (DS_W - 1) * 0.22f);  // 尾尖往下走的速度
+    tf = v > 0.35f ? 1 : (v < -0.35f ? 2 : 0);
+  }
+  auto X = [&](int c) { return x0 + (p.flip ? DS_W - 1 - c : c) * s; };
   auto px = [&](int c, int r, uint16_t col) { gfx->fillRect(X(c), y0 + r * s + off[c], s, s, col); };
-  for (int r = 0; r < 19; r++) {
-    const char *row = r < DS_FLUKE_ROWS ? DS_FLUKE[p.fluke][r] : DS_WHALE[r];
-    for (int c = 0; c < 32; c++)
-      if (row[c] != '.') px(c, r, dsColor(row[c], p.grey));
-  }
+  for (int r = 0; r < 19; r++)
+    for (int c = 0; c < DS_W; c++) {
+      char ch = c < DS_TAIL_C ? DS_WHALE[r][c] : DS_TAIL[tf][r][c - DS_TAIL_C];
+      if (ch != '.') px(c, r, dsColor(ch, p.grey));
+    }
   int fr = p.fin ? 11 : 14;  // 胸鳍
   for (int r = 0; r < 4; r++)
     for (int c = 0; c < 4; c++)
@@ -120,13 +127,11 @@ DsPose dsPose(int m, uint32_t now, int s) {
       p.dy = bob;
       p.wave = 3.5f;
       p.wph = now / 110.0f;
-      p.fluke = dsTailFrame(now) ? 1 : 0;
       break;
     case M_WORKING:  // 游得飞快，时不时喷一下水
       p.eye = blink ? DE_BLINK : DE_OPEN;
       p.wave = 3.0f;
       p.wph = now / 80.0f;
-      p.fluke = (now / 150) % 2;
       if ((now / 400) % 4 == 0) p.spout = 1;
       break;
     case M_WAITING:  // 停下来瞪大眼，举起胸鳍挥，尾巴轻轻摆着等你拿主意
@@ -163,10 +168,12 @@ DsPose dsPose(int m, uint32_t now, int s) {
 int dsFx = 0, dsFxSpout = 0;
 float dsFxTilt = 0;
 
-// 带特效的完整绘制：被点、欢迎回来、睡觉的 z。flip：头朝右
+// 带特效的完整绘制：被点、欢迎回来、对你的反应、睡觉的 z。flip：头朝右
 void drawDeepSeekAt(int cx, int base, int s, int m, uint32_t now, bool flip) {
   DsPose p = dsPose(m, now, s);
-  if (dsPokeUntil > now) {  // 被点：往上一窜喷水
+  int react = buddyReact(m, now), rdy = 0;  // 对你的反应（hw_act.ino）；rdy：反应带的上下动作，鱼缸里也叠加上去
+  if (dsPokeUntil > now) {
+    react = R_NONE;  // 被点：往上一窜喷水
     float k = ((now - (dsPokeUntil - 1800)) % 900) / 900.0f;
     p = DsPose();
     p.dy = -(int)(s * 6 * 4 * k * (1 - k));
@@ -178,6 +185,29 @@ void drawDeepSeekAt(int cx, int base, int s, int m, uint32_t now, bool flip) {
   } else if ((m == M_IDLE || m == M_SLEEP) && backAt && now - backAt < 8000) {  // 欢迎回来：挥胸鳍
     p.eye = DE_HAPPY;
     p.fin = (now / 220) % 2;
+    react = R_NONE;
+  } else if (react == R_STARTLE) {  // 敲桌子 / 大声响：吓一跳，往上一蹿，瞪大眼、举起胸鳍，头顶冒感叹号
+    float k = min(1.0f, (now - micStartleAt) / 500.0f);
+    rdy = -(int)(5 * s * sinf(PI * k));
+    p.eye = DE_BIG;
+    p.fin = 1;
+    p.spout = 0;
+    p.wave = 0.6f;
+  } else if (react == R_DANCE) {  // 放音乐：跟着节拍一顶一顶，胸鳍左右挥，开心眯眼
+    float k = min(1.0f, (now - micLastOnsetMs) / 300.0f);
+    rdy = -(int)(2 * s * (1 - k));
+    p.eye = DE_HAPPY;
+    p.blush = true;
+    p.fin = micOnsetN % 2;
+    p.wave = 1.2f;
+  } else if (react == R_TYPE) {  // 你在敲键盘：跟着按键一下一下点头（连着 bridge 时一键一下，否则按节奏）
+    bool hit = actFresh() ? now - macLastKeyAt < 90 : (now / (typingRate() >= 5 ? 80 : 140)) % 2;
+    rdy = hit ? -max(1, s / 2) : 0;
+    p.eye = DE_OPEN;
+  } else if (react == R_SHH) {  // 有人说话：安静下来，慢慢漂着听，不喷水
+    p.eye = (now % 4200) < 160 ? DE_BLINK : DE_UP;
+    p.spout = 0;
+    p.wave = 0.6f;
   } else if (m == M_IDLE && userAway()) {
     p.eye = DE_SLEEP;
     p.spout = 0;
@@ -185,13 +215,16 @@ void drawDeepSeekAt(int cx, int base, int s, int m, uint32_t now, bool flip) {
   }
   if (dsFx) {  // 在鱼缸里：上下位置由鱼缸控制（浮上水面、跳出水面），每划一下水身子一顶一沉、胸鳍跟着划
     p.dy = dsFx == 2 ? (int)(0.8f * s * sinf(p.wph + 1.57f)) : (m == M_WAITING ? p.dy : 0);
-    if (dsFx == 2 && p.wave >= 2) p.fin = sinf(p.wph) > 0;
+    if (dsFx == 2 && p.wave >= 2 && !react) p.fin = sinf(p.wph) > 0;
     p.tilt = dsFxTilt;
+    p.curl = dsFxTilt < -0.06f;  // 低头往下扎：尾巴竖起来甩出水面
     p.spout = max(p.spout, dsFxSpout);
   }
+  p.dy += rdy;
   p.flip = flip;
   drawWhale(cx, base, s, p, now);
-  int hx = cx + (flip ? 12 : -12) * s + p.dx, y0 = base - 19 * s + p.dy;  // 头顶
+  int hx = cx + (flip ? 14 : -14) * s + p.dx, y0 = base - 19 * s + p.dy;  // 头顶
+  if (react == R_STARTLE) drawBang(cx + (flip ? 3 : -3) * s + p.dx, max(56, y0 - 2 * s), max(2, s * 3 / 2), 5 * s);
   if (m == M_SLEEP || p.eye == DE_SLEEP)
     for (int i = 0; i < 3; i++) {
       uint32_t zt = (now + i * 900) % 2700;
@@ -369,7 +402,7 @@ void dsTank(int x, int y, int w, int h, int wy, int s, int base, uint32_t now) {
   bool rest = !poke && (m == M_SLEEP || (m == M_IDLE && userAway()));      // 趴在缸底慢慢漂
   DsPose ref = dsPose(m, now, s);  // 只用它的划水节奏
   // 横向：来回游（三角波），每划一下水往前一冲；睡觉时漂得很慢
-  int range = max(0, (w - 32 * s) / 2 - 2 * s);
+  int range = max(0, (w - DS_W * s) / 2 - 2 * s);
   uint32_t T = (rest ? 40000 : 9000) + (uint32_t)range * 120, t = now % T;
   float u = t < T / 2 ? (float)t / (T / 2) : 2.0f - (float)t / (T / 2);  // 0 → 1 → 0
   bool flip = t < T / 2;  // 往右游时头朝右
@@ -428,10 +461,10 @@ void dsTank(int x, int y, int w, int h, int wy, int s, int base, uint32_t now) {
   dsFxSpout = 0;
   // 尾巴后面拖一串泡泡（游的时候）
   if (!still && !rest) {
-    int dir = dsTankFlip ? -1 : 1, tx = wx + dir * 14 * s;
+    int dir = dsTankFlip ? -1 : 1, tx = wx + dir * 18 * s;
     for (int i = 0; i < 4; i++) {
       float a = ((now + i * 350) % 1400) / 1400.0f;
-      int bx = tx + dir * (int)(a * 6 * s), by = wb - 14 * s - (int)(a * 8 * s);
+      int bx = tx + dir * (int)(a * 6 * s), by = wb - 7 * s - (int)(a * 8 * s);
       if (by > wy + 2) gfx->drawCircle(bx, by, 1 + (i % 2) * max(1, s / 2), C_DS_WATER);
     }
   }
@@ -464,14 +497,14 @@ void drawDeepSeekScene(uint32_t now) {
     case M_DONE:  // 星星
       for (int i = 0; i < 6; i++) {
         int sx = x + 14 + (i * 47) % (w - 28), sy = y + 12 + (i * 31) % 40;
-        if (((now / 150) + i) % 3 == 0 || abs(sx - dsTankWhaleX) < 18 * s) continue;  // 不压在鲸鱼身上
+        if (((now / 150) + i) % 3 == 0 || abs(sx - dsTankWhaleX) < 20 * s) continue;  // 不压在鲸鱼身上
         uint16_t c = (i % 2) ? C_YELLOW : C_WHITE;
         gfx->fillRect(sx - 1, sy - 7, 3, 15, c);
         gfx->fillRect(sx - 7, sy - 1, 15, 3, c);
       }
       break;
     case M_ERROR: {  // 汗滴：挂在头顶旁边
-      int dy = (now / 40) % 20, hx = dsTankWhaleX - 13 * s, hy = dsTankWhaleBase - 19 * s;
+      int dy = (now / 40) % 20, hx = dsTankWhaleX - 15 * s, hy = dsTankWhaleBase - 19 * s;
       gfx->fillCircle(hx, hy + dy, 5, C_BLUE);
       gfx->fillTriangle(hx - 5, hy - 2 + dy, hx + 5, hy - 2 + dy, hx, hy - 12 + dy, C_BLUE);
       break;

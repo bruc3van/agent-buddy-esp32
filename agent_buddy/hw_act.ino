@@ -133,6 +133,18 @@ int clawdReact(int m, uint32_t now) {
   return R_NONE;
 }
 
+// Codex、小鲸鱼也跟着反应：同一套判断，只是不管欢迎回来（它们各自有）和打瞌睡（它们按 userAway 睡）
+int buddyReact(int m, uint32_t now) {
+  int r = clawdReact(m, now);
+  return r == R_WAVE || r == R_SLEEP ? R_NONE : r;
+}
+
+// 吓一跳时头顶的感叹号：(x, y) 竖条左上角，w 粗、h 长，下面一个点
+void drawBang(int x, int y, int w, int h) {
+  gfx->fillRect(x, y, w, h, C_YELLOW);
+  gfx->fillRect(x, y + h + h * 2 / 11, w, w, C_YELLOW);
+}
+
 // 反应的姿势，以及画在 Clawd 身后的东西（按 U 缩放，首页小 Clawd 也能用）
 void reactPre(Pose &p, int r, uint32_t now) {
   float s = U / 14.0f;
@@ -145,8 +157,7 @@ void reactPre(Pose &p, int r, uint32_t now) {
     p.armL = p.armR = 2;
     p.squash = 0;
     int ex = CX + 4 * U, ey = BASE - 12.4f * U;
-    gfx->fillRect(ex, ey, max(3, U * 3 / 7), U * 11 / 7, C_YELLOW);
-    gfx->fillRect(ex, ey + U * 13 / 7, max(3, U * 3 / 7), max(3, U * 3 / 7), C_YELLOW);
+    drawBang(ex, ey, max(3, U * 3 / 7), U * 11 / 7);
   } else if (r == R_DANCE) {  // 跟着节拍摇摆：每个节拍换一边，双手轮流举起，开心眯眼
     int side = (micOnsetN % 2) ? 1 : -1;
     float k = min(1.0f, (now - micLastOnsetMs) / 300.0f);
