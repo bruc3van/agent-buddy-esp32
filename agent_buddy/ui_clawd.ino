@@ -159,7 +159,10 @@ void cpHappyEyes(int y) {  // ^ ^
 
 void drawClawdJump(uint32_t t) {
   int f = (int)(t * 14 / 1000) % 22;  // 官方这一段 14 帧/秒；最后 8 帧站着歇一下
-  cpOrigin(0, 0);
+  // 顶点时双手高出脚底 30 个官方像素；Buddy 页上方是标签栏，放不下就按离地高度把腾空的几帧往下压，跳得矮一点
+  static const uint8_t LIFT[9] = {0, 3, 9, 10, 10, 10, 10, 10, 6};
+  int over = 46 - (BASE - 15 * U), sink = over > 0 ? (over * 2 + U - 1) / U : 0;
+  cpOrigin(0, f < 9 ? sink * LIFT[f] / 10 : 0);
   switch (f) {
     case 0:  // 下蹲：身子往下沉 2 格，腿缩短
       cpShadow(0);
