@@ -721,8 +721,8 @@ void netInit() {
 // 主循环里取出网络来的行，交给同一个 handleLine（界面状态仍然只在主循环里改）
 void pollNet() {
   if (!netRx) return;
-  if (pairSas >= 0 && !(screen == SCR_SET && setSec == 5)) {  // 有电脑请求配对：跳到「电脑」页给用户确认
-    setSec = 5;
+  if (pairSas >= 0 && !(screen == SCR_SET && setSec == 1)) {  // 有电脑请求配对：跳到「连接」页给用户确认（配对请求在最上面）
+    setSec = 1;
     setScreen(SCR_SET);
   }
   size_t n;
@@ -753,6 +753,6 @@ String netLinkText() {
     return "Wi-Fi · " + (n.length() ? n : String(sess[a].ip));
   }
   if (authFailAt && millis() - authFailAt < 30000) return "认证失败，请重新配对";
-  static const char *const S[5] = {"未配对（插 USB 或在「电脑」里添加）", "等 Wi-Fi", "没连上电脑", "", "Wi-Fi"};
+  static const char *const S[5] = {"未配对（插 USB 或在「连接」里添加）", "等 Wi-Fi", "没连上电脑", "", "Wi-Fi"};
   return String(S[netSt]);
 }

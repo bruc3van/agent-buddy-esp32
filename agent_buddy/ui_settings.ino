@@ -1,9 +1,9 @@
 // 设置页：参考 macOS「系统设置」——左侧分区栏，右侧分组列表（可上下滑动）
-// 分区：声音 / Wi-Fi / 电脑 / 显示 / 雷达 / 关于。设置存 NVS；声音相关的经串口 "CFG {...}" 同步给 bridge
+// 分区：连接（电脑 + Wi-Fi）/ 声音 / 显示 / 雷达 / 关于。设置存 NVS；声音相关的经串口 "CFG {...}" 同步给 bridge
 // 点击用「命中表」：每帧画控件时登记位置，点按时倒序查找（后画的在上层）
 
-const int SET_SB = 128;              // 左侧分区栏宽度
-const int SET_PX = 140, SET_PW = 332;  // 右侧内容区 x 与宽度
+const int SET_SB = 96;               // 左侧分区栏宽度（分区名都是两个字，窄一点给右边留地方）
+const int SET_PX = 108, SET_PW = 364;  // 右侧内容区 x 与宽度
 const int SET_TOP = 42;              // 内容区起点（上面是标题栏）
 const int SET_ROW = 34;              // 普通行高
 
@@ -12,7 +12,7 @@ enum {
   H_NONE, H_HOME, H_SEC0,  // H_SEC0..+3：分区
   H_VOL = 10, H_MUTE, H_SFX, H_VOICE, H_DSEC0, H_MREACT = 20, H_MMUTE, H_GREET, H_RSEAT, H_PRIV, H_ROPEN,
   H_SLEEP0 = 26,  // 26~29：熄屏时长
-  H_BRIGHT = 30, H_NIGHT = 32, H_ACCT = 33, H_SCENE0 = 34, H_CLOCK = 36, H_MICPAUSE, H_SEATCAL, H_SEATCLR,  // id 都要小于 H_WSCAN
+  H_BRIGHT = 30, H_NIGHT = 32, H_ACCT = 33, H_DIAG = 34, H_CLOCK = 36, H_MICPAUSE, H_SEATCAL, H_SEATCLR,  // id 都要小于 H_WSCAN
   H_WSCAN = 40, H_WFORGET, H_WNET = 50,  // H_WNET + i：第 i 个网络
   H_PCADD = 100, H_PCALLOW, H_PCDENY, H_PCPREF, H_PCDEL, H_PC0 = 110,  // 电脑：H_PC0 + i 是第 i 台
 };
@@ -30,7 +30,7 @@ const char *DSEC_LABEL[4] = {"20 秒", "1 分", "3 分", "不播"};
 
 // 内容区的控件滚到标题栏下面就不登记，免得点标题栏误触
 void setHit(int x, int y, int w, int h, int id) {
-  bool chrome = id < H_VOL || id == H_WSCAN;
+  bool chrome = id < H_VOL;
   if (setHitN >= 48 || (!chrome && (y + h <= SET_TOP || y >= 272))) return;
   if (!chrome && y < SET_TOP) { h -= SET_TOP - y; y = SET_TOP; }
   setHits[setHitN++] = {(int16_t)x, (int16_t)y, (int16_t)w, (int16_t)h, (uint8_t)id};
@@ -58,10 +58,8 @@ void settingsLoad() {
   cfgBright = constrain(prefs.getUChar("bright", 100), 10, 100);
   cfgMeetMute = prefs.getBool("mmute", true);
   cfgGreet = prefs.getBool("greet", true);
-  cfgHomeScene = prefs.getBool("scene", true);
   cfgClock = prefs.getBool("clock", true);
   cfgShowAcct = prefs.getBool("acct", false);
-  homeHandle = prefs.getString("handle", homeHandle);
   cfgRadarSeat = prefs.getBool("rseat", true);
   cfgPrivacy = prefs.getBool("priv", true);
   cfgSleepMin = prefs.getUChar("sleepm", 15);
@@ -81,7 +79,6 @@ void settingsSave() {
   prefs.putUChar("bright", cfgBright);
   prefs.putBool("mmute", cfgMeetMute);
   prefs.putBool("greet", cfgGreet);
-  prefs.putBool("scene", cfgHomeScene);
   prefs.putBool("clock", cfgClock);
   prefs.putBool("acct", cfgShowAcct);
   prefs.putBool("rseat", cfgRadarSeat);
@@ -193,28 +190,35 @@ int drawSoundPane(int y) {
   ry = setToggleRow("有人说话时不播报", cfgMeetMute, ry, H_MMUTE, false);
   y = ry + 10;
 
-  y = setGroupHead("Claude 提醒", y);
-  setGroup(y, 4);
+  y = setGroupHead("任务提醒", y);  // 三个 Agent 共用，各有一套音色
+  setGroup(y, cfgVoice ? 4 : 3);
   ry = y + 2;
   ry = setToggleRow("提示音", cfgSfx, ry, H_SFX, true);
   ry = setToggleRow("语音播报", cfgVoice, ry, H_VOICE, false);
+  if (cfgVoice) {  // 只有开着语音播报才有意义：关着时整行不出现
+    pxDots(SET_PX + 10, SET_PX + SET_PW - 10, ry, P_GRID);
+    pxText("耗时超过才播报", SET_PX + 14, ry + 22, P_TEXT, 1);
+    int sel = -1;  // bridge 可以设任意秒数：不在这几档里就都不高亮
+    for (int i = 0; i < 4; i++)
+      if (DSEC_OPT[i] == cfgDoneSec) sel = i;
+    pxSegment(SET_PX + SET_PW - 12 - 4 * 50, ry + 5, 50, 4, DSEC_LABEL, sel, H_DSEC0);
+    ry += SET_ROW;
+  }
   ry = setToggleRow("离开回来时打招呼", cfgGreet, ry, H_GREET, false);
-  pxDots(SET_PX + 10, SET_PX + SET_PW - 10, ry, P_GRID);
-  pxText("任务超过", SET_PX + 14, ry + 22, cfgVoice ? P_TEXT : P_DIM, 1);
-  int sel = -1;  // bridge 可以设任意秒数：不在这几档里就都不高亮
-  for (int i = 0; i < 4; i++)
-    if (DSEC_OPT[i] == cfgDoneSec) sel = i;
-  pxSegment(SET_PX + SET_PW - 12 - 4 * 50, ry + 5, 50, 4, DSEC_LABEL, sel, H_DSEC0);
-  ry += SET_ROW;
   y = ry + 10;
 
   y = setGroupHead("麦克风", y + 4);
-  setGroup(y, 4);
+  setGroup(y, 2);
   ry = y + 2;
-  ry = setToggleRow("Clawd 对你做反应", cfgMicReact, ry, H_MREACT, true);
+  ry = setToggleRow("角色对声音做反应", cfgMicReact, ry, H_MREACT, true);
   ry = setToggleRow("离开时暂停麦克风", cfgMicPause, ry, H_MICPAUSE, false);
+  y = ry + 10;
+  return y + 8 - y0;
+}
+
+// 诊断：麦克风实时听到什么 + 6 个频点（关于 → 诊断里展开）
+int drawMicDiag(int ry) {
   pxDots(SET_PX + 10, SET_PX + SET_PW - 10, ry, P_GRID);
-  // 实时：听到的是什么 + 音量
   String cls = soundClass();
   uint16_t cc = cls == "说话" ? C_YELLOW : (cls == "音乐" ? P_ACCENT : (cls == "敲击" ? C_CLAUDE : (cls == "安静" ? P_DIM : P_GREEN)));
   pxText("听到", SET_PX + 14, ry + 22, P_TEXT, 1);
@@ -232,9 +236,7 @@ int drawSoundPane(int y) {
     gfx->fillRect(bx, ry + 22 - bh, bw - 22, bh, (k >= 1 && k <= 4) ? P_GREEN : P_DIM);
     pxText(FL[k], bx + bw - 20, ry + 22, P_DIM, 1);
   }
-  ry += SET_ROW;
-  y = ry + 10;
-  return y + 8 - y0;
+  return ry + SET_ROW;
 }
 
 int drawDisplayPane(int y) {
@@ -260,13 +262,9 @@ int drawDisplayPane(int y) {
   y = ry + 10;
 
   y = setGroupHead("界面", y);
-  setGroup(y, 3);
+  setGroup(y, 2);
   ry = y + 2;
-  pxText("首页", SET_PX + 14, ry + 22, P_TEXT, 1);
-  static const char *const HOME[2] = {"桌面", "卡片"};
-  pxSegment(SET_PX + SET_PW - 12 - 2 * 64, ry + 5, 64, 2, HOME, cfgHomeScene ? 0 : 1, H_SCENE0);
-  ry += SET_ROW;
-  ry = setToggleRow("离开时显示时钟", cfgClock, ry, H_CLOCK, false);
+  ry = setToggleRow("离开时显示时钟", cfgClock, ry, H_CLOCK, true);
   ry = setToggleRow("显示完整账号（邮箱）", cfgShowAcct, ry, H_ACCT, false);
   y = ry + 10;
   return y + 8 - y0;
@@ -279,9 +277,29 @@ int setInfoRow(const String &k, const String &v, int y, bool first) {
   return y + 30;
 }
 
+bool setDiagOpen = false;  // 关于 → 诊断：默认收起
+
+// 雷达每秒收到几帧（诊断用）
+int radarFps() {
+  static uint32_t fAt = 0, fN = 0;
+  static int fps = 0;
+  if (millis() - fAt > 1000) { fps = radarFrames - fN; fN = radarFrames; fAt = millis(); }
+  return fps;
+}
+
 int drawAboutPane(int y) {
   int y0 = y;
   int ry;
+  // 日常要看的放最上面：作者、连没连上电脑、固件版本
+  pxPanel(SET_PX, y, SET_PW, 4 * 30 + 4, P_PANEL, P_EDGE, true);
+  ry = y + 2;
+  ry = setInfoRow("作者", "@bruc3van", ry, true);
+  pxXLogo(SET_PX + SET_PW - 14 - pxW("@bruc3van", 1) - 18, ry - 30 + 10, P_TEXT);  // X 图标贴在账号左边
+  bool br = mode != M_OFFLINE && lastMsgAt;
+  ry = setInfoRow("桥接程序", br ? netLinkText() : String("未连接 · ") + netLinkText(), ry, false);
+  ry = setInfoRow("固件", String(FW_VERSION), ry, false);
+  ry = setInfoRow("设备", "JC4827W543 · 4.3 寸", ry, false);
+  y = ry + 10;
   if (batHas || batUsb) {
     y = setGroupHead("电源", y);
     // 上次续航：从拔掉 USB 到低电量关机（hw_bat.ino）
@@ -301,23 +319,31 @@ int drawAboutPane(int y) {
       pxPanel(SET_PX, y, SET_PW, (1 + lifeRow) * 30 + 4, P_PANEL, P_EDGE, true);
       ry = setInfoRow("状态", batState(), y + 2, true);
       if (lifeRow) ry = setInfoRow("上次续航", life, ry, false);
-      y = setFootnote("接了电池会顺便充电；拔掉 USB 后显示电量", ry);
+      y = ry + 10;
     }
-    y = setGroupHead("设备", y);
   }
-  pxPanel(SET_PX, y, SET_PW, 6 * 30 + 4, P_PANEL, P_EDGE, true);
+  // 诊断：调试才看的信息，默认收起
+  y = setGroupHead("诊断", y);
+  pxPanel(SET_PX, y, SET_PW, SET_ROW + 4 + (setDiagOpen ? 6 * 30 + 2 * SET_ROW : 0), P_PANEL, P_EDGE, true);
   ry = y + 2;
-  ry = setInfoRow("设备", "JC4827W543 · 4.3 寸", ry, true);
-  ry = setInfoRow("芯片", "ESP32-S3 · " + String(ESP.getCpuFreqMHz()) + " MHz", ry, false);
-  ry = setInfoRow("固件", String(FW_VERSION), ry, false);
-  ry = setInfoRow("可用内存", String(ESP.getFreeHeap() / 1024) + " KB · PSRAM " + String(ESP.getFreePsram() / 1024) + " KB", ry, false);
-  ry = setInfoRow("已运行", fmtDuration(millis() / 1000), ry, false);
-  bool br = mode != M_OFFLINE && lastMsgAt;
-  ry = setInfoRow("bridge", br ? netLinkText() : String("未连接 · ") + netLinkText(), ry, false);
+  pxText("诊断信息", SET_PX + 14, ry + 22, P_TEXT, 1);
+  String fold = setDiagOpen ? "收起" : "展开";
+  pxText(fold, SET_PX + SET_PW - 14 - pxW(fold, 1), ry + 22, P_ACCENT, 1);
+  setHit(SET_PX, ry, SET_PW, SET_ROW, H_DIAG);
+  ry += SET_ROW;
+  if (setDiagOpen) {
+    pxDots(SET_PX + 10, SET_PX + SET_PW - 10, ry, P_GRID);
+    ry = setInfoRow("芯片", "ESP32-S3 · " + String(ESP.getCpuFreqMHz()) + " MHz", ry, true);
+    ry = setInfoRow("可用内存", String(ESP.getFreeHeap() / 1024) + " KB · PSRAM " + String(ESP.getFreePsram() / 1024) + " KB", ry, false);
+    ry = setInfoRow("已运行", fmtDuration(millis() / 1000), ry, false);
+    ry = setInfoRow("雷达", radarFresh() ? String(radarFps()) + " 帧/秒" : String("未连接（P1）"), ry, false);
+    // LD2450 本身的能力（手册）：最远 6 米、左右各 60°、同时最多 3 人；你正后方被你身体挡住，看不到
+    ry = setInfoRow("雷达范围", "6 米 · 左右各 60° · 最多 3 人", ry, false);
+    ry = setInfoRow("雷达盲区", "你正后方（被你挡住）", ry, false);
+    ry = drawMicDiag(ry);
+  }
   y = ry + 10;
-  pxXLogo(SET_PX + 6, y + 4, P_DIM);
-  pxText("@bruc3van", SET_PX + 26, y + 16, P_DIM, 1);
-  return y + 30 - y0;
+  return y + 8 - y0;
 }
 
 // ---------- 电脑（Wi-Fi 配对的电脑，net_link.ino）----------
@@ -346,7 +372,7 @@ int drawPcPane(int y, uint32_t now) {
   }
   int n = hostN;
   if (pcSel >= n) pcSel = -1;
-  y = setGroupHead("已配对的电脑", y);
+  y = setGroupHead("电脑", y);
   pxPanel(SET_PX, y, SET_PW, max(n, 1) * SET_ROW + 4, P_PANEL, P_EDGE, true);
   ry = y + 2;
   if (!n) {
@@ -362,7 +388,7 @@ int drawPcPane(int y, uint32_t now) {
     pref = i < hostN && !strcmp(prefHid, hosts[i].hid);
     pairUnlock();
     int st = netHostState(i);
-    String right = st == 2 ? "控制中" : st == 1 ? (hostNetActive() ? "待命" : "待命（USB 在用）") : "未连接";
+    String right = st == 2 ? "正在用" : st == 1 ? (hostNetActive() ? "在线，没在用" : "在线，USB 在用") : "离线";
     if (pref) right = "首选 · " + right;
     pxText(name, SET_PX + 14, ry + 22, i == pcSel ? P_ACCENT : P_TEXT, 1);
     pxText(right + " >", SET_PX + SET_PW - 14 - pxW(right + " >", 1), ry + 22, st == 2 ? P_GREEN : P_DIM, 1);
@@ -400,7 +426,7 @@ int drawPcPane(int y, uint32_t now) {
     pxText("添加电脑（屏幕验证码）", SET_PX + 14, ry + 22, P_TEXT, 1);
     pxText(">", SET_PX + SET_PW - 22, ry + 22, P_DIM, 1);
     setHit(SET_PX, ry, SET_PW, SET_ROW, H_PCADD);
-    y = setFootnote("插着 USB 启动 bridge 时会自动配对", ry + SET_ROW);
+    y = setFootnote("插着 USB 启动桥接程序时会自动配对", ry + SET_ROW);
   }
   if (pairMsg[0] && now - pairMsgAt < 8000) y = setFootnote(pairMsg, y - 8);
   return y + 8 - y0;
@@ -451,17 +477,11 @@ int drawRadarPane(int y) {
   y = ry + 10;
 
   y = setGroupHead("状态", y + 4);
-  static uint32_t fAt = 0, fN = 0;
-  static int fps = 0;
-  if (millis() - fAt > 1000) { fps = radarFrames - fN; fN = radarFrames; fAt = millis(); }
-  pxPanel(SET_PX, y, SET_PW, 5 * 30 + 4 + SET_ROW, P_PANEL, P_EDGE, true);
+  pxPanel(SET_PX, y, SET_PW, 3 * 30 + 4 + SET_ROW, P_PANEL, P_EDGE, true);
   ry = y + 2;
-  ry = setInfoRow("雷达", radarFresh() ? "已连接 · " + String(fps) + " 帧/秒" : String("未连接（P1）"), ry, true);
+  ry = setInfoRow("雷达", radarFresh() ? String("已连接") : String("未连接（P1）"), ry, true);  // 帧率、量程在 关于 → 诊断
   ry = setInfoRow("现在", radarFresh() ? String(radarCount()) + " 人" + (radarSeatPresent() ? " · 你在座位上" : " · 座位没人") : String("—"), ry, false);
   ry = setInfoRow("靠近", privacyOn ? (ghostOn ? String("有人 · 在你身后") : String("有人")) : String("没人"), ry, false);
-  // LD2450 本身的能力（手册）：最远 6 米、左右各 60°、同时最多 3 人；你正后方被你身体挡住，看不到
-  ry = setInfoRow("能看多远", "6 米 · 左右各 60° · 最多 3 人", ry, false);
-  ry = setInfoRow("盲区", "你正后方（被你挡住）", ry, false);
   pxDots(SET_PX + 10, SET_PX + SET_PW - 10, ry, P_GRID);
   pxText("打开雷达页", SET_PX + 14, ry + 22, P_ACCENT, 1);
   pxText(">", SET_PX + SET_PW - 22, ry + 22, P_DIM, 1);
@@ -470,31 +490,25 @@ int drawRadarPane(int y) {
   return ry + 10 - y0;
 }
 
-const char *const SEC_GLYPH[6][8] = {
+const char *const SEC_GLYPH[5][8] = {
   {"...1..1.", "..11...1", "1111.1.1", "1111.1.1", "1111.1.1", "1111.1.1", "..11...1", "...1..1."},  // 喇叭
-  {"", "", "", "", "", "", "", ""},                                                                  // Wi-Fi 用现成图标
+  {"..1111..", ".1....1.", "1..11..1", ".1....1.", "..1..1..", "........", "...11...", "...11..."},  // 连接：Wi-Fi
   {"1..1..1.", ".1...1..", "..111...", "1.111.1.", "..111...", ".1...1..", "1..1..1.", "........"},  // 太阳
   {"", "", "", "", "", "", "", ""},                                                                  // 雷达用 16px 图标
   {"...11...", "...11...", "........", "..111...", "...11...", "...11...", "...11...", "..1111.."},  // i
-  {"11111111", "1......1", "1......1", "1......1", "11111111", "...11...", "..1111..", "........"},  // 显示器
 };
-const char *SEC_NAME[6] = {"声音", "Wi-Fi", "显示", "雷达", "关于", "电脑"};
-const uint16_t SEC_TINT[6] = {0xF96A, 0x0C3F, 0x5AFC, 0x362B, 0x8C72, 0xFC60};  // 同 macOS：粉红 / 蓝 / 靛蓝 / 绿 / 灰 / 橙
-const int SEC_ORDER[6] = {0, 1, 5, 2, 3, 4};  // 分区栏里的顺序：「电脑」排在 Wi-Fi 后面
+const char *SEC_NAME[5] = {"声音", "连接", "显示", "雷达", "关于"};
+const int SEC_N = 5, SEC_ORDER[5] = {1, 0, 2, 3, 4};  // 分区栏里的顺序：连接不上时其它设置都没用，「连接」排第一
 
-void drawSecIcon(int i, int x, int y) {
-  pxPanel(x, y, 22, 22, SEC_TINT[i], SEC_TINT[i], false);
-  if (i == 1) {
-    pxWifiIcon(x + 5, y + 7, 3, P_TEXT, 1);
-    return;
-  }
+// 分区图标：16×16 单色（同 magpie 页签，不再用 macOS 的彩色底块）；bg 是图标下面的底色
+void drawSecIcon(int i, int x, int y, uint16_t c, uint16_t bg) {
   if (i == 3) {
-    drawRadarIcon(x + 3, y + 3, 1, P_TEXT, P_TEXT, P_TEXT, SEC_TINT[i]);
+    drawRadarIcon(x, y, 1, c, c, c, bg);
     return;
   }
   for (int r = 0; r < 8; r++)
-    for (int c = 0; c < 8; c++)
-      if (SEC_GLYPH[i][r][c] == '1') gfx->fillRect(x + 3 + c * 2, y + 3 + r * 2, 2, 2, P_TEXT);
+    for (int k = 0; k < 8; k++)
+      if (SEC_GLYPH[i][r][k] == '1') gfx->fillRect(x + k * 2, y + r * 2, 2, 2, c);
 }
 
 void drawSidebar() {
@@ -503,37 +517,54 @@ void drawSidebar() {
   pxHomeBtn(6, 6);
   setHit(0, 0, 50, 44, H_HOME);
   pxU("设置", 46, 26, P_TEXT);
-  for (int k = 0; k < 6; k++) {
+  for (int k = 0; k < SEC_N; k++) {
     int i = SEC_ORDER[k], y = 48 + k * 34;
     bool on = i == setSec;
     if (on) pxPanel(6, y, SET_SB - 12, 32, P_ACCENT, P_ACCENT, false);
-    drawSecIcon(i, 12, y + 5);
-    pxText(SEC_NAME[i], 42, y + 21, on ? P_BG : P_TEXT, 1);
+    drawSecIcon(i, 14, y + 8, on ? P_BG : P_DIM, on ? P_ACCENT : P_PANEL);
+    pxText(SEC_NAME[i], 40, y + 21, on ? P_BG : P_TEXT, 1);
     setHit(0, y - 1, SET_SB, 34, H_SEC0 + i);
   }
-  pxText(FW_VERSION, 12, 262, P_DIM, 1);
 }
 
 // 齿轮（首页状态栏，16×16）
+// 首页状态栏的齿轮：6 个齿（上下各一，斜上斜下各二，间隔 60°），16×16，每格 1px，和旁边 16px 的字一样高
 void drawGearBadge(int x, int y) {
-  const char *g[8] = {"...11...", ".1.11.1.", "..1111..", "111..111", "111..111", "..1111..", ".1.11.1.", "...11..."};
-  for (int r = 0; r < 8; r++)
-    for (int c = 0; c < 8; c++)
-      if (g[r][c] == '1') gfx->fillRect(x + c * 2, y + r * 2, 2, 2, P_TEXT);
+  static const char *g[16] = {
+    "......####......",
+    "......####......",
+    "....########....",
+    "##.##########.##",
+    "################",
+    ".######..######.",
+    "..####....####..",
+    "..###......###..",
+    "..###......###..",
+    "..####....####..",
+    ".######..######.",
+    "################",
+    "##.##########.##",
+    "....########....",
+    "......####......",
+    "......####......",
+  };
+  for (int r = 0; r < 16; r++)
+    for (int c = 0; c < 16; c++)
+      if (g[r][c] == '#') gfx->drawPixel(x + c, y + r, P_TEXT);
 }
 
 // ---------- 整页 ----------
 void drawSettings(uint32_t now) {
   gfx->fillScreen(P_BG);
   setHitN = 0;
+  if (setSec == 5) setSec = 1;  // 旧编号「电脑」：并进了「连接」
   int y = SET_TOP + 6 - setScroll[setSec];
   int h = 0;
   switch (setSec) {
     case 0: h = drawSoundPane(y); break;
-    case 1: h = drawWifiPane(y, now); break;
+    case 1: h = drawPcPane(y, now); h += drawWifiPane(y + h, now); break;  // 连接：先电脑，再 Wi-Fi
     case 2: h = drawDisplayPane(y); break;
     case 3: h = drawRadarPane(y); break;
-    case 5: h = drawPcPane(y, now); break;
     default: h = drawAboutPane(y); break;
   }
   setContentH[setSec] = h;
@@ -541,9 +572,14 @@ void drawSettings(uint32_t now) {
   // 标题栏盖住滚出去的内容
   gfx->fillRect(SET_SB, 0, 480 - SET_SB, SET_TOP, P_BG);
   pxU(SEC_NAME[setSec], SET_PX + 2, 28, P_TEXT);
-  if (setSec == 1) drawWifiHeaderBtn();
   for (int x = SET_SB + 4; x < 480; x += 4) gfx->fillRect(x, SET_TOP - 2, 2, 2, P_GRID);
   drawSidebar();
+}
+
+// 调试 / 截图：{"t":"ui","sy":120} 把当前分区滚到 120px，{"t":"ui","diag":1} 展开诊断
+void settingsDebug(int sy, int diag) {
+  if (sy >= 0) setScroll[setSec == 5 ? 1 : setSec] = sy;
+  if (diag >= 0) setDiagOpen = diag == 1;
 }
 
 void settingsDrag(int dy) {
@@ -646,9 +682,8 @@ void settingsTap(int x, int y) {
   } else if (id == H_GREET) {
     cfgGreet = !cfgGreet;
     settingsSave();
-  } else if (id == H_SCENE0 || id == H_SCENE0 + 1) {
-    cfgHomeScene = id == H_SCENE0;
-    settingsSave();
+  } else if (id == H_DIAG) {
+    setDiagOpen = !setDiagOpen;
   } else if (id == H_CLOCK) {
     cfgClock = !cfgClock;
     settingsSave();

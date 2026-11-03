@@ -1,6 +1,6 @@
 // 首页 · 桌面场景：Clawd 站在书桌上，旁边是显示器（显示 Agent 在干什么），喜鹊站在显示器上（magpie），
 // Codex 站在显示器和台灯之间，DeepSeek 的小鲸鱼住在墙上的鱼缸里（和左边的窗户对称）。
-// 窗外随真实时间变成白天 / 黄昏 / 夜晚，夜里台灯自动亮。底部三块小组件：额度 / 当前状态 / magpie 今天。
+// 窗外随真实时间变成白天 / 黄昏 / 夜晚，夜里台灯自动亮。底部三张卡：Claude / Codex / DeepSeek 各一张（状态 + 额度）。
 // 离开电脑后切到待机时钟（drawStandbyClock）。
 
 const int DESK_Y = 200;                     // 桌面
@@ -289,7 +289,7 @@ void monitorPane(int x, int w, int a, int md, const String &lb, uint32_t now) {
         uint16_t c = (seed % 4 == 0) ? acc : (seed % 4 == 1 ? P_ACCENT : (seed % 4 == 2 ? P_GREEN : P_DIM));
         gfx->fillRect(x + 6 + ind, y, min(len, w - 12 - ind), 4, c);
       }
-      line = lb.length() ? lb : String("干活中");
+      line = agDetail(a).length() && !narrow ? agDetail(a) : (lb.length() ? lb : String("干活中"));  // 有具体命令 / 文件就显示它
       lc = acc;
       break;
     }
@@ -482,7 +482,7 @@ void drawGreeting(uint32_t now) {
 // ---------- 底部组件 ----------
 // 一行额度：左边品牌色小方块 + 名字，中间方块条，右边剩余百分比（5 小时窗口）
 void dockQuotaLine(const char *name, uint16_t tint, float used, int x, int y, int w) {
-  gfx->fillRect(x, y - 8, 6, 6, tint);
+  gfx->fillRect(x, y - 6, 6, 6, tint);  // 和字的中线对齐（字高约 y-11 ~ y）
   pxText(name, x + 10, y, P_DIM, 1);
   if (used < 0) {
     pxText("—", x + w - pxW("—", 1), y, P_DIM, 1);
@@ -499,54 +499,30 @@ void dockQuotaLine(const char *name, uint16_t tint, float used, int x, int y, in
 
 // 一行余额：DeepSeek 没有额度窗口，右边直接写余额
 void dockBalLine(int x, int y, int w) {
-  gfx->fillRect(x, y - 8, 6, 6, agColor(2));
+  gfx->fillRect(x, y - 6, 6, 6, agColor(2));
   pxText("DeepSeek", x + 10, y, P_DIM, 1);
-  pxText(dsBal, x + w - pxW(dsBal, 1), y, dsBalOk ? P_GREEN : P_RED, 1);
+  String b = dsBal.length() ? dsBal : String("—");
+  pxText(b, x + w - pxW(b, 1), y, !dsBal.length() ? P_DIM : (dsBalOk ? P_GREEN : P_RED), 1);
 }
 
-int dockQuotaA[2] = {0, 1}, dockRowA[2] = {0, 1};  // 底部两块组件每一行是哪个 Agent（点哪行进哪个）
+// 底栏：Claude / Codex / DeepSeek 固定顺序各一张卡。上行是状态（干活时右边是用时），下行是额度条（DeepSeek 是余额）
+const int DOCK_X[3] = {8, 165, 322}, DOCK_W = 150;
 
 void drawDock(uint32_t now) {
-  const int w = 150;
-  // 额度：有数据的排前面（Claude / Codex 的 5 小时额度，DeepSeek 的余额），只放得下两行
-  int n = 0;
-  bool has[3] = {h5Used >= 0, cxH5Used >= 0, dsBal.length() > 0};
-  for (int a = 0; a < 3 && n < 2; a++)
-    if (has[a]) dockQuotaA[n++] = a;
-  for (int a = 0; a < 2 && n < 2; a++)
-    if (!has[a] && (n == 0 || dockQuotaA[0] != a)) dockQuotaA[n++] = a;
-  if (dockQuotaA[0] > dockQuotaA[1]) { int t = dockQuotaA[0]; dockQuotaA[0] = dockQuotaA[1]; dockQuotaA[1] = t; }  // 按固定顺序放
-  int x = 8;
-  pxPanel(x, DOCK_Y, w, DOCK_H, P_PANEL, P_EDGE, true);
-  for (int k = 0; k < 2; k++) {
-    int a = dockQuotaA[k], y = DOCK_Y + 18 + k * 17;
-    if (a == 2) dockBalLine(x + 10, y, w - 20);
-    else dockQuotaLine(agName(a), agColor(a), a ? cxH5Used : h5Used, x + 10, y, w - 20);
-  }
-  // 当前状态：两行，放最忙的两个 Agent
-  int ord[3];
-  agOrder(ord);
-  dockRowA[0] = min(ord[0], ord[1]);  // 两行按固定顺序放
-  dockRowA[1] = max(ord[0], ord[1]);
-  x = 165;
-  pxPanel(x, DOCK_Y, w, DOCK_H, P_PANEL, P_EDGE, true);
-  for (int k = 0; k < 2; k++) {
-    int a = dockRowA[k], m = agMode(a), y = DOCK_Y + 18 + k * 17;
-    bool busy = m == M_THINKING || m == M_WORKING || m == M_COMPACT || m == M_WAITING;
-    gfx->fillRect(x + 10, y - 8, 6, 6, agColor(a));
-    String t = m == M_OFFLINE ? String("未连接") : agLabel(a);
+  for (int a = 0; a < 3; a++) {
+    int x = DOCK_X[a], m = agMode(a);
+    bool busy = m == M_THINKING || m == M_WORKING || m == M_COMPACT;
+    bool wait = m == M_WAITING, flash = wait && (now / 400) % 2;
+    pxPanel(x, DOCK_Y, DOCK_W, DOCK_H, P_PANEL, wait ? (flash ? agHi(a) : agColor(a)) : P_EDGE, true);  // 等你确认：边框闪
+    String t = m == M_OFFLINE ? String("未连接") : agLabel(a), tm;
     uint32_t ts = agTurnStart(a);
-    if (busy && ts) t += a == 2 ? "，用时 " + dsDuration((now - ts) / 1000) : " " + fmtDuration((now - ts) / 1000);  // DeepSeek 照 dsh 的写法
-    pxMarquee(t, x + 20, y, m == M_WAITING ? agHi(a) : (busy ? P_TEXT : P_DIM), 1, w - 30);
+    if ((busy || wait) && ts) tm = fmtClock((now - ts) / 1000);
+    int tw = tm.length() ? pxW(tm, 1) + 6 : 0;
+    if (tm.length()) pxText(tm, x + DOCK_W - 10 - pxW(tm, 1), DOCK_Y + 17, P_DIM, 1);
+    pxMarquee(t, x + 10, DOCK_Y + 17, wait ? agHi(a) : (busy ? P_TEXT : P_DIM), 1, DOCK_W - 20 - tw);
+    if (a == 2) dockBalLine(x + 10, DOCK_Y + 34, DOCK_W - 20);
+    else dockQuotaLine(agName(a), agColor(a), a ? cxH5Used : h5Used, x + 10, DOCK_Y + 34, DOCK_W - 20);
   }
-  // magpie 今天
-  x = 322;
-  pxPanel(x, DOCK_Y, w, DOCK_H, P_PANEL, P_EDGE, true);
-  drawBirdPx(wag28[0], WAG28_SIZE, x + 6, DOCK_Y + 7, magpieOnline ? P_TEXT : P_DIM);
-  const MuPeriod &T = muPeriods[0];
-  String s1 = !magpieOnline ? String("未连接") : (T.has ? T.calls + " 次请求" : String("读取中…"));  // 同用量页「今天」：网关 + 会话日志
-  pxMarquee(s1, x + 40, DOCK_Y + 18, magpieOnline ? P_TEXT : P_DIM, 1, w - 46);
-  if (T.has) pxMarquee("今天花费 " + T.cost, x + 40, DOCK_Y + 35, P_DIM, 1, w - 46);
 }
 
 // ---------- 鱼缸：DeepSeek 的小鲸鱼住在墙上的鱼缸里，位置大小和左边的窗户左右对称 ----------
@@ -587,11 +563,9 @@ void drawHomeScene(uint32_t now) {
 }
 
 void sceneTap(int x, int y) {
-  if (y >= DOCK_Y) {
-    int k = y >= DOCK_Y + DOCK_H / 2 ? 1 : 0;  // 上一行 / 下一行
-    if (x < 160) buddyAgent = dockQuotaA[k];
-    else if (x < 322) buddyAgent = dockRowA[k];
-    setScreen(x >= 322 ? SCR_MAGPIE : SCR_BUDDY);
+  if (y >= DOCK_Y) {  // 底栏：点哪张卡进哪个 Agent
+    buddyAgent = x < DOCK_X[1] - 4 ? 0 : (x < DOCK_X[2] - 4 ? 1 : 2);
+    setScreen(SCR_BUDDY);
   } else if (x >= MON_X + MON_W - 70 && x < MON_X + MON_W && y < MON_Y + 10) {
     setScreen(SCR_MAGPIE);  // 喜鹊
   } else if (x >= TK_X - 4 && y < TK_Y + TK_H + 7) {
@@ -677,17 +651,6 @@ void sbMagpie(int x, int y, uint32_t now) {
   if (now - sbFlapAt > 6000) sbFlapAt = now;
   drawBirdPx(wag28[wagFrame(now, sbFlapAt)], WAG28_SIZE, x, y, magpieOnline ? P_TEXT : P_DIM);
 }
-// 一行额度：品牌色方块 + 名字 + 方块条 + 剩余；等你确认时换成提醒
-void sbQuota(int a, int x, int y, int w) {
-  int m = a ? cxMode : mode;
-  uint16_t tint = a ? C_CODEX : C_CLAUDE;
-  if (m == M_WAITING) {
-    gfx->fillRect(x, y - 8, 6, 6, tint);
-    pxText(String(a ? "Codex" : "Claude") + " 需要你确认", x + 10, y, a ? C_CODEX_HI : C_CLAUDE, 1);
-    return;
-  }
-  dockQuotaLine(a ? "Codex" : "Claude", tint, a ? cxH5Used : h5Used, x, y, w);
-}
 
 // 翻页卡：卡片底色、上半张亮一点、中缝、两侧合页；文字只画在 [clipT, clipB) 这一段里
 const int FC_Y = 70, FC_H = 128, FC_W = 190, FC_X[2] = {40, 250};
@@ -756,22 +719,20 @@ void drawStandbyClock(uint32_t now) {
   gfx->fillRect(237, FC_Y + FC_H / 2 + 16, 6, 6, dot);
   sbSleepers(90, 420, FC_Y, 4, now);
   sbMagpie(362, FC_Y - 26, now);
-  // 离座时是远看：每张卡片下面只放两行——额度条、今天完成几个（16px 大字）；DeepSeek 只在等你确认时占最后一行
-  for (int a = 0; a < 2; a++) {
-    sbQuota(a, FC_X[a], 222, FC_W);
-    int n = doneDay == t.days ? doneToday[a] : 0;
-    String d = n ? "今天完成 " + String(n) + " 个" : String("今天还没完成任务");
-    uint32_t wk = agWorkSec[a];
-    if (n && wk >= 60) {  // 放得下就带上今天一共干了多久
-      String w2 = "完成 " + String(n) + " 个，共 " + (wk < 3600 ? String(wk / 60) + " 分钟" : String(wk / 3600) + "小时" + String(wk % 3600 / 60) + "分");
-      if (pxUW(w2) <= FC_W - 20) d = w2;
+  // 离座时是远看：Claude / Codex / DeepSeek 固定三列，每列一行额度（DeepSeek 是余额）+ 一行 16px 大字「完成 N 个」；
+  // 等你确认的那一列边框闪，大字换成「等你确认」
+  const int SB_X[3] = {20, 172, 324}, SB_W = 136;
+  for (int a = 0; a < 3; a++) {
+    int x = SB_X[a], m = agMode(a);
+    bool wait = m == M_WAITING;
+    if (wait) {
+      uint16_t c = (now / 400) % 2 ? agHi(a) : agColor(a);
+      for (int k = 0; k < 2; k++) gfx->drawRect(x - 8 + k, 206 + k, SB_W + 16 - 2 * k, 62 - 2 * k, c);
     }
-    pxU(d, FC_X[a] + 10, 244, n ? P_TEXT : P_DIM);
-  }
-  if (dsMode == M_WAITING) {
-    String ds = "DeepSeek 需要你确认";
-    int mx = 240 - (pxW(ds, 1) + 10) / 2;
-    gfx->fillRect(mx, 264 - 8, 6, 6, agColor(2));
-    pxText(ds, mx + 10, 264, agHi(2), 1);
+    if (a == 2) dockBalLine(x, 226, SB_W);
+    else dockQuotaLine(agName(a), agColor(a), a ? cxH5Used : h5Used, x, 226, SB_W);
+    int n = doneDay == t.days ? doneToday[a] : 0;
+    String d = m == M_OFFLINE ? String("未连接") : wait ? String("等你确认") : n ? "完成 " + String(n) + " 个" : String("今天还没完成");
+    pxU(d, x, 254, wait ? agHi(a) : (n ? P_TEXT : P_DIM));
   }
 }

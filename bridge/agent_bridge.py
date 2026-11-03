@@ -92,7 +92,6 @@ AGENT_NAME = {"claude": "Claude", "codex": "Codex", "deepseek": "DeepSeek"}
 SFX_PREFIX = {"codex": "c", "deepseek": "d"}  # 板子上每个 Agent 一套音色：音效名前加这个前缀
 done_n = {"claude": 0, "codex": 0, "deepseek": 0}  # bridge 启动以来每个 Agent 收到几次 Stop；板子按增量记「今天完成」，汇总状态会把并发完成合并掉
 last_done = {}  # 每个 Agent 最近一次完成：(时刻, 这一轮用了几秒, 项目名)
-work_day = {"day": "", "claude": 0, "codex": 0, "deepseek": 0}  # 今天每个 Agent 一共干了几秒（各轮用时相加）
 
 
 _log_lock = threading.Lock()
@@ -523,10 +522,6 @@ def handle_hook(ev, agent="claude"):
             done_n[agent] = done_n.get(agent, 0) + 1
             dur = int(now - t0) if t0 else 0
             last_done[agent] = (int(now), dur, fit(proj, 24))
-            day = time.strftime("%Y-%m-%d")
-            if work_day["day"] != day:
-                work_day.update(day=day, claude=0, codex=0, deepseek=0)
-            work_day[agent] = work_day.get(agent, 0) + dur
     log(f"{name:<18} {agent[:2]} {sid[:8]} -> {state} {label} {detail}")
 
 
@@ -562,8 +557,7 @@ def aggregate(agent="claude"):
         dn = done_n.get(agent, 0)
         ld = last_done.get(agent)
         extra = {"dn": dn, "proj": best.get("proj", "") if best else "",
-                 "ld": ld[0] if ld else 0, "ldd": ld[1] if ld else 0, "ldp": ld[2] if ld else "",
-                 "wk": work_day.get(agent, 0) if work_day["day"] == time.strftime("%Y-%m-%d") else 0}
+                 "ld": ld[0] if ld else 0, "ldd": ld[1] if ld else 0, "ldp": ld[2] if ld else ""}
     for sid in gone:
         forget(sid)
 
@@ -1422,7 +1416,7 @@ def build_quotas():
 
 
 def build_usage(i, period):
-    """与 magpie 面板「用量」页同口径：网关 + 会话日志，取接口给的总数。"""
+    """与 magpie 面板「用量」页同口径：网关 + 会话日志，取接口给的总数。返回用量（mu）和按 Agent 的排行（mk）两条消息。"""
     d = mget(f"usage/requests?period={period}&limit={20 if i == 0 else 1}")
     s = d.get("series") or []
     if i == 0:  # Claude 当前模型：statusline 只有命令行版会发，桌面版靠 magpie 里最近一条 Claude 请求
@@ -1450,7 +1444,25 @@ def build_usage(i, period):
         "hsub": f"读缓存 {short_num(cr)}" if cr else "",
         "ymax": short_num(top), "bars": [round(1000 * v / top) for v in per][-60:],
         "xl": [axis_label(s[k].get("label"), d.get("bucket")) for k in idx],
-    }
+    }, build_rank(i, d)
+
+
+def build_rank(i, d):
+    """排行页：这段时间每个 Agent 花了多少（按费用排，没有费用时按 token），色条长度按第一名归一化。"""
+    ags = []
+    for a in (d.get("by") or {}).get("agent") or []:
+        tok = (a.get("input") or 0) + (a.get("output") or 0)
+        ags.append((a.get("cost") or 0, tok, a))
+    ags.sort(key=lambda x: (x[0], x[1]), reverse=True)
+    top_cost, top_tok = (ags[0][0], max(x[1] for x in ags)) if ags else (0, 0)
+    rows = []
+    for cost, tok, a in ags[:8]:
+        w = cost / top_cost if top_cost else (tok / top_tok if top_tok else 0)
+        rows.append({"n": fit(a.get("name") or a.get("id"), 24), "i": a.get("icon") or "", "c": hue565(a.get("id")),
+                     "cost": fmt_cost(cost) if cost else "—", "sub": f"{a.get('calls') or 0} 次 · {short_num(tok)} token",
+                     "e": a.get("errors") or 0, "w": round(1000 * w)})
+    return {"t": "mk", "p": i, "n": str(d.get("calls") or 0), "cost": fmt_cost(d["cost"]) if d.get("cost") else "—",
+            "na": len(ags), "r": rows}
 
 
 # magpie 路由页里每个 Agent 的颜色（routing.js 的 HUES / SPARE / hueOf）
@@ -1685,9 +1697,9 @@ def magpie_loop(link):
                 if name == "quotas":
                     msgs = [build_quotas()]
                 elif name == "usage0":
-                    msgs = [build_usage(0, "today")]
+                    msgs = list(build_usage(0, "today"))
                 elif name == "usage":
-                    msgs = [build_usage(i, p) for i, p in enumerate(PERIODS) if i]
+                    msgs = [m for i, p in enumerate(PERIODS) if i for m in build_usage(i, p)]
                 elif name == "routes":
                     msgs = [build_routes()]
                 elif name == "dstoday":
@@ -1986,7 +1998,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         u = urlparse(self.path)
         try:
-            fn(u.path, parse_qs(u.query, keep_blank_values=True))  # 保留空值：/ui?handle= 表示清空
+            fn(u.path, parse_qs(u.query))
         except Exception as e:  # noqa: BLE001 —— 出错也要回一个响应，调用方不至于等到超时
             log(f"http {self.command} {u.path} failed: {e!r}"[:200])
             try:
@@ -2009,8 +2021,6 @@ class Handler(BaseHTTPRequestHandler):
             self._reply(200 if ok else 503, f"gamma={g}" if ok else "串口未连接")
         elif path == "/ui":
             cmd = {k: int(v[0]) for k, v in q.items() if v[0].lstrip("-").isdigit() and len(v[0]) < 10}
-            if "handle" in q:  # 首页左上角的 X 账号：/ui?handle=@xxx，空串不显示
-                cmd["handle"] = q["handle"][0][:24]
             ok = link.send({"t": "ui", **cmd})
             self._reply(200 if ok else 503, "ok" if ok else "串口未连接")
         elif path == "/replay":  # 调试：把最近 3 条网关请求当作新请求，再播放一遍飞行动画

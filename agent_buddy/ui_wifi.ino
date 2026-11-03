@@ -199,6 +199,12 @@ bool wifiUp() { return WiFi.status() == WL_CONNECTED; }
 
 // 首页右上角用
 // 首页右上角：放大 2 倍（24×16），(x, y) 为左上角
+// 首页状态栏要不要提示 Wi-Fi：0 不用（连着，或者从没配过、只用 USB）/ 1 正在连 / 2 配过但断开了
+int wifiAlert() {
+  if (!wSavedSsid.length() || wifiUp()) return 0;
+  return wConnecting ? 1 : 2;
+}
+
 void drawWifiBadge(int x, int y) {
   if (wifiUp()) pxWifiIcon(x, y, arcsOf(rssiBars(WiFi.RSSI())), P_TEXT, 2);
   else if (wConnecting) pxWifiIcon(x, y, (millis() / 250) % 4, P_TEXT, 2);  // 连接中：弧线依次点亮
@@ -216,18 +222,19 @@ int pxChip(const String &t, int x, int y, uint16_t bg, uint16_t fg) {
 
 const int W_ROW = 36;
 
-// 标题栏右侧的「扫描」按钮
-void drawWifiHeaderBtn() {
-  int bw = 72, bx = SET_PX + SET_PW - bw;
-  if (wScanning) {  // 扫描中是状态不是按钮：不画底框，灰字 + 三个依次亮起的点
-    int tw = pxW("扫描中", 1), tx = bx + bw - tw - 16, ph = (millis() / 300) % 4;
-    pxText("扫描中", tx, 26, P_DIM, 1);
-    for (int d = 0; d < 3; d++) gfx->fillRect(tx + tw + 2 + d * 5, 22, 2, 2, d < ph ? P_DIM : P_EDGE);
+// 「附近的网络」那一行右边：扫描中是状态（灰字 + 三个依次亮起的点），平时是「重新扫描」文字按钮
+void drawWifiScanBtn(int y) {
+  int rx = SET_PX + SET_PW - 4;
+  if (wScanning) {
+    int tw = pxW("扫描中", 1), tx = rx - 16 - tw, ph = (millis() / 300) % 4;
+    pxText("扫描中", tx, y + 13, P_DIM, 1);
+    for (int d = 0; d < 3; d++) gfx->fillRect(tx + tw + 2 + d * 5, y + 9, 2, 2, d < ph ? P_DIM : P_EDGE);
   } else {
-    pxPanel(bx, 7, bw, 28, P_ACCENT, P_ACCENT, false);
-    pxText("扫描", bx + bw / 2 - pxW("扫描", 1) / 2, 26, P_BG, 1);
+    String s = "重新扫描";
+    int tw = pxW(s, 1);
+    pxText(s, rx - tw, y + 13, P_ACCENT, 1);
+    setHit(rx - tw - 10, y - 6, tw + 14, 28, H_WSCAN);
   }
-  setHit(bx, 0, bw, SET_TOP, H_WSCAN);
 }
 
 // 从 y 开始画（已减去滚动量），返回内容高度
@@ -236,6 +243,7 @@ int drawWifiPane(int y, uint32_t now) {
   String cur = wifiUp() ? WiFi.SSID() : String("");
 
   // 当前连接
+  y = setGroupHead("Wi-Fi", y);
   pxPanel(x0, y, w, 52, P_PANEL, P_EDGE, true);
   if (wifiUp()) {
     int rs = WiFi.RSSI();
@@ -263,11 +271,11 @@ int drawWifiPane(int y, uint32_t now) {
     pxPanel(hx, y + 1, pxW(n, 1) + 10, 16, P_EDGE, P_EDGE, false);
     pxText(n, hx + 5, y + 13, P_TEXT, 1);
   }
+  drawWifiScanBtn(y);
   y += 20;
-  if (!wnN) {
-    String s = wScanning ? "正在扫描附近的网络…" : "暂无网络 · 点右上角「扫描」";
-    pxText(s, x0 + w / 2 - pxW(s, 1) / 2, y + 40, P_DIM, 1);
-    return y + 60 - y0;
+  if (!wnN) {  // 扫描中的状态只在右边说一次；没扫到才在这里说
+    if (!wScanning) pxText("没有找到网络", x0 + w / 2 - pxW("没有找到网络", 1) / 2, y + 30, P_DIM, 1);
+    return y + 48 - y0;
   }
   pxPanel(x0, y, w, wnN * W_ROW + 6, P_PANEL, P_EDGE, true);
   for (int i = 0; i < wnN; i++) {

@@ -121,6 +121,24 @@ bool magpieHandle(const char *t, JsonDocument &doc) {
         break;
       }
     }
+  } else if (!strcmp(t, "mk")) {
+    MkPeriod &K = mkPeriods[constrain((int)(doc["p"] | 0), 0, 3)];
+    K.has = true;
+    K.calls = String(doc["n"] | "");
+    K.cost = String(doc["cost"] | "");
+    K.na = doc["na"] | 0;
+    K.n = 0;
+    for (JsonObject r : doc["r"].as<JsonArray>()) {
+      if (K.n >= 8) break;
+      MkRow &R = K.r[K.n++];
+      R.name = String(r["n"] | "");
+      R.icon = String(r["i"] | "");
+      R.cost = String(r["cost"] | "");
+      R.sub = String(r["sub"] | "");
+      R.err = r["e"] | 0;
+      R.w = constrain((int)(r["w"] | 0), 0, 1000);
+      R.color = brandColor(R.icon, R.name, r["c"] | M_PURPLE);
+    }
   } else if (!strcmp(t, "ma")) {
     maCount = 0;
     maVisible = 0;
@@ -241,7 +259,7 @@ void magpieTap(int x, int y) {
     magScroll[3] = 0;
     return;
   }
-  if (magTab == 2 && pixelStyle && y >= 44 && y <= 78 && x >= 8 && x < 240) {  // 像素风的周期按钮更高
+  if ((magTab == 2 || magTab == 0) && pixelStyle && y >= 44 && y <= 78 && x >= 8 && x < 240) {  // 用量、排行共用周期按钮
     muPeriod = constrain((x - 8) / 58, 0, 3);
     return;
   }

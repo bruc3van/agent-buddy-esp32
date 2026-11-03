@@ -104,8 +104,6 @@ void drawAgentIcon(const String &icon, const String &name, int x, int y, int s) 
 }
 
 // ---------- 首页 ----------
-uint32_t homeFlapAt = 0;
-
 uint32_t standbyLastMs = 0;  // 最近一次画待机时钟的时间：点一下只是唤醒，不触发按钮
 
 void drawHome(uint32_t now) {
@@ -114,7 +112,7 @@ void drawHome(uint32_t now) {
     drawStandbyClock(now);  // 离开电脑：待机时钟（ui_scene.ino）
     return;
   }
-  drawHomePx(now);
+  drawHomeScene(now);  // 桌面场景（ui_scene.ino）
 }
 
 void homeTap(int x, int y) {
@@ -128,27 +126,19 @@ void homeTap(int x, int y) {
     clockPinned = true;
     return;
   }
-  if (y < 40 && (batHas || batUsb) && homeIconX && x >= homeIconX - 34 && x < homeIconX + 4) {  // 电池 → 关于
-    setSec = 4;
+  if (y < 40 && homeIconX && x >= homeIconX - 8 && x < homeIconX + 24) {  // 齿轮（四周放宽 8px 好点）
     setScreen(SCR_SET);
     return;
   }
-  bool inPill = homeIconX ? (x >= homeIconX - 8 && x < homeIconX + HOME_PILL_W + 8) : x > 280;
-  if (y < 40 && inPill) {  // 右上角设置按钮（放宽 8px 好点）
-    if (homeIconX && x >= homeIconX + 90) {  // 雷达 → 雷达页
-      setScreen(SCR_RADAR);
+  for (int i = 0; i < homeAlertN; i++)  // 异常提示：电量 → 关于，Wi-Fi → Wi-Fi，麦克风 → 声音，有人靠近 → 雷达页
+    if (y < 40 && x >= homeAlertX[i] - 5 && x < homeAlertX[i] + homeAlertW[i] + 5) {
+      if (homeAlertSec[i] < 0) {
+        setScreen(SCR_RADAR);
+      } else {
+        setSec = homeAlertSec[i];
+        setScreen(SCR_SET);
+      }
       return;
     }
-    if (homeIconX && x >= homeIconX + 32 && x < homeIconX + 56) setSec = 0;  // 麦克风 → 声音
-    else if (homeIconX && x >= homeIconX + 56) setSec = 1;                   // Wi-Fi
-    setScreen(SCR_SET);
-    return;
-  }
-  if (cfgHomeScene) {
-    sceneTap(x, y);
-    return;
-  }
-  if (y < 38 || y > 266) return;
-  if (x >= 14 && x <= 234) setScreen(SCR_BUDDY);
-  else if (x >= 246 && x <= 466) setScreen(SCR_MAGPIE);
+  sceneTap(x, y);
 }

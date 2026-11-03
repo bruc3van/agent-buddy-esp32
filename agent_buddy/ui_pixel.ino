@@ -1,5 +1,4 @@
-// 像素风小样（目前只做 magpie「用量」页）：整数倍放大的像素字体、切角粗边框、实色错位阴影、方块柱状图
-// 风格开关：串口 {"t":"ui","style":1}（bridge: POST /ui?style=1），0 切回原样；保存在 NVS
+// 像素风界面（唯一的样式）：整数倍放大的像素字体、切角粗边框、实色错位阴影、方块柱状图
 
 
 // 切角面板：2px 边框，四角各切掉 2px，右下 3px 实色阴影
@@ -78,11 +77,11 @@ void drawMagHeaderPx(uint32_t now) {
   gfx->fillRect(0, 0, 480, M_TOP, P_BG);
   pxHomeBtn(6, 6);
   drawBirdPx(wag28[wagFrame(now, magWagAt)], WAG28_SIZE, 44, 6, P_TEXT);
-  const char *names[4] = {"Agent", "额度", "用量", "路由"};
+  const char *names[4] = {"排行", "额度", "用量", "路由"};
   for (int i = 0; i < 4; i++) {
     int x = TAB_X + i * TAB_W;
     bool on = i == magTab;
-    String s = names[i], ns = i == 0 && maCount ? String(maCount) : String("");
+    String s = names[i], ns = "";
     if (on) pxPanel(x + 2, 6, TAB_W - 4, 28, P_ACCENT, P_ACCENT, false);
     int w = pxW(s, 1) + (ns.length() ? 5 + pxChipW(ns) : 0), lx = x + TAB_W / 2 - w / 2;
     pxText(s, lx, 25, on ? P_BG : P_DIM, 1);
@@ -325,39 +324,35 @@ void civilDate(int32_t days, int &mo, int &d) {
   mo = mp < 10 ? mp + 3 : mp - 9;
 }
 
-void drawStatusLine(const String &s, int cx, int y, uint16_t dot, uint16_t c) {
-  int w = pxW(s, 1) + 10;
-  int x = cx - w / 2;
-  gfx->fillRect(x, y - 7, 6, 6, dot);
-  pxText(s, x + 10, y, c, 1);
+// 产品标：白色像素对话框 + 笑脸，右眼每隔几秒眨一下（13×11 格，每格 2px）
+void pxBuddyMark(int x, int y, uint16_t c, uint32_t now) {
+  static const char *M[11] = {
+    ".###########.",
+    "#...........#",
+    "#...#...#...#",
+    "#...#...#...#",
+    "#...........#",
+    "#..#.....#..#",
+    "#...#####...#",
+    "#...........#",
+    ".###########.",
+    "..##.........",
+    "..#..........",
+  };
+  bool wink = now % 4200 < 260;
+  for (int r = 0; r < 11; r++)
+    for (int k = 0; k < 13; k++)
+      if (M[r][k] == '#' && !(wink && k == 8 && (r == 2 || r == 3))) gfx->fillRect(x + k * 2, y + r * 2, 2, 2, c);
+  if (wink) gfx->fillRect(x + 14, y + 6, 6, 2, c);  // 眨眼：一道短横
 }
 
-void homeCard(int x, int y, int w, int h, uint16_t accent) {
-  pxPanel(x, y, w, h, P_PANEL, P_EDGE, true);
-  gfx->fillRect(x + 2, y + 2, w - 4, 4, accent);  // 顶部品牌色细边
-}
-
-void drawHomePx(uint32_t now) {
-  if (cfgHomeScene) {
-    drawHomeScene(now);  // 桌面场景（ui_scene.ino）
-    return;
-  }
-  gfx->fillScreen(P_BG);
-  for (int y = 6; y < 272; y += 12)  // 淡淡的点阵底纹
-    for (int x = 6; x < 480; x += 12) gfx->drawPixel(x, y, P_DOT);
-  drawHomeTopBar(now);
-  drawHomeCards(now);
-}
-
-// 顶部状态栏：X 账号 + 电池 / 齿轮 / 麦克风 / Wi-Fi / 雷达 + 日期时钟（点日期时钟切到待机时钟页）
+// 顶部状态栏：常态只有「产品标 Agent Buddy · 齿轮 · 日期时间」；电量低、Wi-Fi 断开、麦克风关着、有人靠近这些异常才出现在齿轮左边
 void drawHomeTopBar(uint32_t now) {
-  // 左：X 账号；右：设置按钮（齿轮 / 麦克风 / Wi-Fi 收在一个按钮里）+ 日期时间。文字统一 16px、同一颜色
-  if (homeHandle.length()) {
-    pxXLogo(14, 12, P_TEXT);
-    pxU(homeHandle, 34, 24, P_TEXT);
-  }
+  pxBuddyMark(10, 8, P_TEXT, now);
+  pxU("Agent Buddy", 44, 24, P_TEXT);
   int rx = 470;
   uint32_t e = epochNow();
+  homeDateX = 0;
   if (e) {
     int64_t lt = (int64_t)e + tzOff;
     int32_t days = lt / 86400, sec = lt % 86400;
@@ -367,89 +362,39 @@ void drawHomeTopBar(uint32_t now) {
     char hh[3], mm[3];
     snprintf(hh, 3, "%02d", (int)(sec / 3600));
     snprintf(mm, 3, "%02d", (int)(sec % 3600 / 60));
-    String t = String(hh) + ((now / 500) % 2 ? ":" : " ") + mm;  // 冒号每秒闪一下
-    String full = String(mo) + "/" + d + " " + wk[(days + 4) % 7] + " " + hh + ":" + mm;
-    rx -= pxUW(full);
+    String date = String(mo) + "/" + d + " " + wk[(days + 4) % 7] + " ";
+    rx -= pxUW(date + hh + ":" + mm);
     homeDateX = rx;
-    pxU(String(mo) + "/" + d + " " + wk[(days + 4) % 7] + " " + t, rx, 24, P_TEXT);
+    pxU(date + hh + ((now / 500) % 2 ? ":" : " ") + mm, rx, 24, P_TEXT);  // 冒号每秒闪一下
     rx -= 12;
   }
-  // 状态图标：不加底框，和左边的账号、右边的时间同在一条基线上；点齿轮进设置，点麦克风 → 声音，点 Wi-Fi → Wi-Fi，点雷达 → 雷达页
-  int bx = rx - HOME_PILL_W;
-  homeIconX = bx;
-  pxPanel(bx + 4, 4, 28, 28, P_PANEL, P_EDGE, false);  // 齿轮是入口，加按钮底，和右边几个状态图标区分开
-  drawGearBadge(bx + 10, 10);
-  drawMicBadge(bx + 36, 10);
-  drawWifiBadge(bx + 60, 10);
-  drawRadarBadge(bx + 94, 10);
-  drawBatBadge(bx - 26, 12);  // 靠电池：电量；插着 USB：插头
-}
-
-// 两张卡片的首页（设置 → 显示 → 首页：卡片）
-void drawHomeCards(uint32_t now) {
-  const int CY = 38, CH = 226, CW = 222;
-  // ---- 左：Agent Buddy ----
-  int lx = 12, lcx = lx + CW / 2;
-  homeCard(lx, CY, CW, CH, C_CLAUDE);
-  Pose p;
-  p.dy = ((now / 350) % 2) ? -2 : 0;
-  p.eye = (now % 3700) < 140 ? 1 : 0;
-  if (mode == M_OFFLINE) { p.color = C_GREY; p.eye = 1; }
-  if (mode == M_WORKING) {
-    int ph = (now / 120) % 4;
-    p.legLift[0] = p.legLift[2] = (ph < 2) ? 3 : 0;
-    p.legLift[1] = p.legLift[3] = (ph < 2) ? 0 : 3;
-    p.armL = (ph < 2) ? 1 : 0;
-    p.armR = (ph < 2) ? 0 : 1;
+  // 齿轮：设置入口，不加按钮框
+  rx -= 16;
+  homeIconX = rx;
+  drawGearBadge(rx, 10);
+  // 异常提示：从齿轮往左排，越靠近齿轮越要紧；记下位置给 homeTap 用
+  homeAlertN = 0;
+  auto alert = [&](int w, int sec) {
+    rx -= w + 10;
+    homeAlertX[homeAlertN] = rx;
+    homeAlertW[homeAlertN] = w;
+    homeAlertSec[homeAlertN++] = sec;
+    return rx;
+  };
+  if (batHas && !batUsb && batPct < 20) {  // 靠电池、电量低
+    String p = String(batPct) + "%";
+    int x = alert(22 + pxW(p, 1), 4);
+    drawBatBadge(x, 12);
+    pxText(p, x + 24, 23, P_RED, 1);
   }
-  int oU = U, oCX = CX, oBASE = BASE;
-  U = 8; CX = lcx; BASE = CY + 128;
-  drawClawd(p);
-  U = oU; CX = oCX; BASE = oBASE;
-  if (mode == M_THINKING || mode == M_WORKING) drawSpark(lcx + 54, CY + 44, 12, sparkFrame(now), 0, C_CLAUDE);
-  pxText("Agent Buddy", lcx - pxW("Agent Buddy", 2) / 2, CY + 162, P_TEXT, 2);
-  bool busy = mode == M_THINKING || mode == M_WORKING || mode == M_COMPACT || mode == M_WAITING;
-  uint16_t sc = mode == M_OFFLINE ? P_DIM : (busy ? C_CLAUDE : P_GREEN);
-  drawStatusLine(mode == M_OFFLINE ? String("未连接") : label, lcx, CY + 184, sc, mode == M_OFFLINE ? P_DIM : P_TEXT);
-  pxDots(lx + 12, lx + CW - 12, CY + 194, P_GRID);
-  // 迷你数据：5 小时额度
-  pxText("5h", lx + 14, CY + 214, P_DIM, 1);
-  if (h5Used >= 0) {
-    float left = constrain(100.0 - h5Used, 0, 100);
-    uint16_t c = quotaColor(left);
-    String pct = String((int)(left + 0.5)) + "%";
-    int pw = pxW(pct, 1);
-    pxSegBar(lx + 34, CY + 205, CW - 34 - 22 - pw, 9, left / 100.0, c, P_EDGE);
-    pxText(pct, lx + CW - 14 - pw, CY + 214, c, 1);
-  } else {
-    pxText("暂无数据", lx + CW - 14 - pxW("暂无数据", 1), CY + 214, P_DIM, 1);
+  if (int wa = wifiAlert()) {  // 配过 Wi-Fi 但没连上（只用 USB 的不提示）
+    String t = wa == 1 ? "连接中" : "断开";
+    int x = alert(26 + pxW(t, 1), 1);
+    drawWifiBadge(x, 10);
+    pxText(t, x + 28, 23, wa == 1 ? P_DIM : C_YELLOW, 1);
   }
-
-  // ---- 右：magpie ----
-  int rx = 246, rcx = rx + CW / 2;
-  homeCard(rx, CY, CW, CH, P_ACCENT);
-  if (now - homeFlapAt > 4000) homeFlapAt = now;
-  drawBirdPx(wag100[wagFrame(now, homeFlapAt)], WAG100_SIZE, rcx - WAG100_SIZE / 2, CY + 26, P_TEXT);
-  pxText("magpie", rcx - pxW("magpie", 2) / 2, CY + 162, P_TEXT, 2);
-  const MuPeriod &T = muPeriods[0];  // 同用量页「今天」：网关 + 会话日志
-  String s2 = T.has ? "今天 " + T.calls + " 次 · " + T.tok : String(magpieOnline ? "读取中…" : "未连接");
-  drawStatusLine(s2, rcx, CY + 184, magpieOnline ? P_GREEN : P_DIM, magpieOnline ? P_TEXT : P_DIM);
-  pxDots(rx + 12, rx + CW - 12, CY + 194, P_GRID);
-  // 迷你数据：今天每小时的用量
-  pxText("今天", rx + 14, CY + 214, P_DIM, 1);
-  int bx0 = rx + 46, bx1 = rx + CW - 14, base = CY + 216;
-  if (T.has && T.nb) {
-    float step = (float)(bx1 - bx0) / T.nb;
-    int bw = max(2, (int)step - 2);
-    for (int k = 0; k < T.nb; k++) {
-      int h = 14 * T.bars[k] / 1000;
-      int x = bx0 + (int)(k * step);
-      if (T.bars[k] > 0) gfx->fillRect(x, base - max(h, 2), bw, max(h, 2), P_ACCENT);
-      else gfx->fillRect(x, base - 1, bw, 1, P_EDGE);
-    }
-  } else {
-    pxText(magpieOnline ? "读取中…" : "未连接", rx + CW - 14 - pxW(magpieOnline ? "读取中…" : "未连接", 1), CY + 214, P_DIM, 1);
-  }
+  if (!micOn) drawMicBadge(alert(14, 0), 10);  // 麦克风没开：灰色话筒 + 红斜杠
+  if (privacyOn) drawRadarBadge(alert(24, -1), 10);  // 雷达看到有人靠近（黄色光点），点了进雷达页
 }
 
 // ---------- Agent Buddy 右侧面板 ----------
@@ -551,7 +496,7 @@ void drawAgentPanel(int a, uint32_t now) {
   String big, small, tm;  // tm：干活时右下角的用时（副行放正在跑的命令 / 改的文件）
   if (m == M_OFFLINE) {
     big = "未连接";
-    small = "在电脑上启动 bridge";
+    small = "在电脑上启动桥接程序";
   } else {
     const char *think = a == 2 ? DS_THINKING : (a ? CX_THINK[(now / 3000) % 4] : THINK_VERBS[(now / 3000) % 6]);
     big = poke ? String(a == 2 ? "噗～" : (a ? "嗨！" : "嘿！")) : (m == M_THINKING ? String(think) : agLabel(a));
@@ -605,45 +550,46 @@ void drawAgentPanel(int a, uint32_t now) {
 
 void drawPanelPx(uint32_t now) { drawAgentPanel(0, now); }
 
-// ---------- magpie：Agent ----------
-// 去掉 magpie 没填的占位：「—— · effort high」→「effort high」，「provider ——」→ 空
-String cleanModel(const String &m) {
-  String out, rest = m;
-  while (rest.length()) {
-    int k = rest.indexOf(" · ");
-    String seg = k < 0 ? rest : rest.substring(0, k);
-    rest = k < 0 ? String("") : rest.substring(k + strlen(" · "));
-    seg.trim();
-    String t = seg;
-    t.replace("—", "");
-    t.replace("-", "");
-    t.trim();
-    if (!t.length() || seg.endsWith("—") || seg.endsWith(" -") || seg.endsWith("--")) continue;
-    out += String(out.length() ? " · " : "") + seg;
+// ---------- magpie：排行 ----------
+// 这段时间钱花在哪个 Agent 上：按费用排，色条按第一名的比例，右边次数 / token / 失败数。周期和用量页共用
+void drawRankPx() {
+  const int TOP = 82, RH = 36;  // 周期按钮下面是列表，列表能滚，按钮不动
+  const MkPeriod &K = mkPeriods[muPeriod];
+  magViewH[0] = 272 - TOP;
+  magContentH[0] = K.has ? K.n * RH + 24 : 0;
+  if (!K.has || !K.n) {
+    String s = !magpieOnline ? "未连接" : (K.has ? "这段时间还没有请求" : "读取中…");
+    pxText(s, 240 - pxW(s, 1) / 2, 170, P_DIM, 1);
   }
-  return out;
-}
-
-void drawAgentsPx() {
-  int y = M_TOP + 4 - magScroll[0];
-  int h = maCount * 32 + 8;
-  magContentH[0] = h + 10;
-  magViewH[0] = 272 - M_TOP;
-  if (!maCount) {
-    String s = magpieOnline ? "读取中…" : "未连接";
-    pxText(s, 240 - pxW(s, 1) / 2, 150, P_DIM, 1);
-    return;
+  int y0 = TOP - magScroll[0];
+  for (int i = 0; i < K.n; i++) {
+    const MkRow &R = K.r[i];
+    int y = y0 + i * RH;
+    if (y > 272 || y + RH < TOP) continue;
+    if (i) pxDots(12, 468, y - 4, P_GRID);
+    drawAgentIcon(R.icon, R.name, 12, y + 1, 16);
+    int cw = pxUW(R.cost);
+    pxU(R.cost, 468 - cw, y + 15, i ? P_TEXT : R.color);
+    pxUMarquee(R.name, 36, y + 15, P_TEXT, 468 - cw - 12 - 36);
+    String e = R.err ? " · " + String(R.err) + " 次失败" : String("");
+    int ew = e.length() ? pxW(e, 1) : 0, sw = pxW(R.sub, 1);
+    if (ew) pxText(e, 468 - ew, y + 29, P_RED, 1);
+    pxText(R.sub, 468 - ew - sw, y + 29, P_DIM, 1);
+    int bw = max(2, (468 - ew - sw - 12 - 36) * R.w / 1000);  // 色条：最长到右边小字前面
+    gfx->fillRect(36, y + 22, bw, 6, R.color);
   }
-  pxPanel(8, y, 464, h, P_PANEL, P_EDGE, true);
-  for (int i = 0; i < maCount; i++) {
-    const MaAgent &A = maAgents[i];
-    int ry = y + 4 + i * 32;
-    if (ry > 272 || ry + 32 < M_TOP) continue;
-    if (i) pxDots(44, 460, ry, P_GRID);
-    drawAgentIcon(A.icon, A.name, 18, ry + 8, 16);
-    pxU(A.name, 44, ry + 22, A.hidden ? P_DIM : P_TEXT);
-    String m = A.hidden ? String("已隐藏") : cleanModel(A.model);
-    pxText(m, 460 - pxW(m, 1), ry + 21, P_DIM, 1);
+  if (K.has && K.n) {
+    int fy = y0 + K.n * RH + 6;
+    String f = maCount > K.na ? "共配置 " + String(maCount) + " 个 Agent，这段时间用到 " + String(K.na) + " 个" : String("");
+    if (f.length() && fy < 272) pxText(f, 12, fy, P_DIM, 1);
+  }
+  // 周期按钮和合计盖在最上面（列表滚上去时不压住它们）
+  gfx->fillRect(0, M_TOP, 480, TOP - M_TOP - 4, P_BG);
+  static const char *const pn[4] = {"今天", "7 天", "30 天", "全部"};
+  pxSegDraw(8, 47, 58, 4, pn, muPeriod, 28);
+  if (K.has) {
+    String tot = "共 " + K.calls + " 次 · " + K.cost;
+    pxText(tot, 470 - pxW(tot, 1), 65, P_DIM, 1);
   }
 }
 
@@ -901,7 +847,7 @@ void drawRouteTabPx(uint32_t now) {
     }
     String s = magpieOnline ? "今天还没有请求经过 magpie" : "magpie 未连接";
     pxText(s, 240 - pxW(s, 1) / 2, 214, P_TEXT, 1);
-    String s2 = magpieOnline ? "有请求时会在这里画出路线" : "在电脑上打开 magpie 和 bridge";
+    String s2 = magpieOnline ? "有请求时会在这里画出路线" : "在电脑上打开 magpie 和桥接程序";
     pxText(s2, 240 - pxW(s2, 1) / 2, 236, P_DIM, 1);
     return;
   }
@@ -925,10 +871,11 @@ void drawMagpiePx(uint32_t now) {
     drawUsagePx(now);
   } else {
     gfx->fillScreen(P_BG);
-    if (magTab == 0) drawAgentsPx();
+    if (magTab == 0) drawRankPx();
     else if (magTab == 1) drawQuotaTabPx();
     else drawRouteTabPx(now);
-    if (magTab < 2) pxScrollbar(477, M_TOP + 4, 272 - M_TOP - 8, magViewH[magTab], magContentH[magTab], magScroll[magTab]);  // 下面还有：右边一条细滚动条
+    if (magTab == 0) pxScrollbar(477, 82, 272 - 86, magViewH[0], magContentH[0], magScroll[0]);
+    else if (magTab == 1) pxScrollbar(477, M_TOP + 4, 272 - M_TOP - 8, magViewH[magTab], magContentH[magTab], magScroll[magTab]);  // 下面还有：右边一条细滚动条
   }
   drawMagHeaderPx(now);
 }

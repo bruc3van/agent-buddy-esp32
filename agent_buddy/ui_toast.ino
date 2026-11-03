@@ -100,22 +100,21 @@ void drawToast(uint32_t now) {
   }
   // 卡片：等你确认 / 有人靠近用来源色描边，表示「还在等你」
   pxPanel(x, y, NT_W, NT_H, P_PANEL, kind <= 1 ? tile : P_EDGE, true);
-  // 图标：32×32 的来源色方块
-  pxPanel(x + 9, y + 9, 32, 32, tile, tile, false);
+  // 图标：同 Buddy 页状态卡——深色底块上画来源色图标（亮色底配白图标太糊）
+  pxPanel(x + 9, y + 9, 32, 32, P_BG, P_BG, false);
   if (kind == 1) {
-    drawBehindIcon(x + 9, y + 9, 2, P_BG, (now / 500) % 2 ? mix565(tile, P_BG, 110) : tile);  // 背后那个人一闪一闪
+    drawBehindIcon(x + 9, y + 9, 2, tile, (now / 500) % 2 ? mix565(tile, P_BG, 110) : tile);  // 背后那个人一闪一闪
   } else {
-    drawIcon8(agIcon8(agent), x + 13, y + 13, 3, P_TEXT);
-    // 角标：完成 ✓ / 出错 × / 等你确认 小手，画在图标右下角
+    drawIcon8(agIcon8(agent), x + 13, y + 13, 3, agHi(agent));  // 高亮色：深底上 Codex 的蓝太暗
+    // 角标：完成 ✓ / 出错 × / 等你确认 小手，画在图标右下角；亮色底 + 深色图形，外面一圈卡片底色和图标隔开
     const char *const *badge = kind == 0 ? IC_HAND : (kind == 2 ? IC_CROSS : IC_CHECK);
-    uint16_t bc = kind == 0 ? tile : (kind == 2 ? P_RED : P_GREEN);
-    // 不加深色描边：角标直接压在图标角上，切角让它看起来是圆的
-    pxPanel(x + 29, y + 29, 16, 16, bc, bc, false);
+    uint16_t bc = kind == 0 ? agHi(agent) : (kind == 2 ? P_RED : P_GREEN);
+    pxPanel(x + 30, y + 30, 16, 16, P_PANEL, P_PANEL, false);  // 角标 12×12，压在图标右下角
+    pxPanel(x + 32, y + 32, 12, 12, bc, bc, false);
     int bob = kind == 0 && (now / 300) % 2 ? -1 : 0;
-    bool bold = kind == 3;  // ✓ 只有一像素细，横向加粗一像素
     for (int r = 0; r < 8; r++)
       for (int c = 0; c < 8; c++)
-        if (badge[r][c] == '1') gfx->fillRect(x + 33 + c - bold, y + 33 + r + bob, 1 + bold, 1, P_TEXT);
+        if (badge[r][c] == '1') gfx->fillRect(x + 34 + c, y + 34 + r + bob, 1, 1, P_BG);
   }
   int tx = x + 50, tw = NT_W - 50 - 10;
   String when = "现在";

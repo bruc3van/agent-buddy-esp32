@@ -72,7 +72,7 @@ enum Mode { M_OFFLINE, M_IDLE, M_SLEEP, M_THINKING, M_WORKING, M_WAITING, M_DONE
 
 Mode mode = M_OFFLINE;
 String label = "未连接";
-String statusDetail = "请在电脑上启动 bridge（USB 或 Wi-Fi）";
+String statusDetail = "请在电脑上启动桥接程序（USB 或 Wi-Fi）";
 String tool = "";
 int sessions = 0;
 uint32_t modeSince = 0;     // 进入当前模式的 millis
@@ -150,7 +150,6 @@ void agExtraFrom(int a, JsonVariantConst d) {
   agLastAt[a] = d["ld"] | 0;
   agLastDur[a] = d["ldd"] | 0;
   agLastProj[a] = String(d["ldp"] | "");
-  agWorkSec[a] = d["wk"] | 0;
 }
 
 void handleLine(const String &line) {
@@ -248,7 +247,7 @@ void handleLine(const String &line) {
     if (!lineFromNet) netSetDial(doc);
   } else if (!strcmp(t, "ui")) {  // 切换页面：{"t":"ui","screen":2,"tab":1,"period":0}
     if (doc["agent"].is<int>()) buddyAgent = constrain((int)doc["agent"], 0, 2);  // Buddy 页：0 Claude / 1 Codex / 2 DeepSeek
-    if (doc["set"].is<int>()) setSec = constrain((int)doc["set"], 0, 5);  // 设置页分区
+    if (doc["set"].is<int>()) setSec = constrain((int)doc["set"], 0, 5);  // 设置页分区（5 是旧的「电脑」，drawSettings 里换成 1「连接」）
     if (doc["screen"].is<int>()) setScreen((Screen)constrain((int)doc["screen"], 0, 5));
     if (doc["tab"].is<int>()) magTab = constrain((int)doc["tab"], 0, 3);
     if (doc["period"].is<int>()) muPeriod = constrain((int)doc["period"], 0, 3);
@@ -259,6 +258,7 @@ void handleLine(const String &line) {
       prefs.putUChar("prot", panelRot);
       fixPanel();
     }
+    if (doc["sy"].is<int>() || doc["diag"].is<int>()) settingsDebug(doc["sy"] | -1, doc["diag"] | -1);  // 调试：设置页滚动 / 展开诊断
     if (doc["rcol"].is<int>()) routeS = (int)doc["rcol"] ? ROUTE_FOLD : 0;  // 调试：路由舞台收起 / 展开
     if (doc["perf"].is<int>()) perfOn = (int)doc["perf"] == 1;  // 调试：性能计时
     if (doc["scan"].is<int>()) hwScan();
@@ -268,10 +268,6 @@ void handleLine(const String &line) {
     if (doc["mic"].is<int>()) micBar = (int)doc["mic"] == 1;  // 麦克风调试：串口报音量
     if (doc["vol"].is<int>() && !doc["beep"].is<int>()) spkSetVolume(doc["vol"]);  // 喇叭音量 0~100
     settingsFromJson(doc);
-    if (doc["handle"].is<const char *>()) {  // 首页左上角的 X 账号，空串不显示
-      homeHandle = String((const char *)doc["handle"]).substring(0, 24);
-      prefs.putString("handle", homeHandle);
-    }
     if (doc["react"].is<int>() || doc["standby"].is<int>() || doc["rdemo"].is<int>() || doc["cmode"].is<int>()) {  // 调试：强制显示 15 秒
       dbgReact = doc["react"] | 0;
       dbgMode = doc["cmode"] | -1;
@@ -999,7 +995,7 @@ void loop() {
     mode = M_OFFLINE;
     modeSince = now;
     label = "未连接";
-    statusDetail = "请在电脑上启动 bridge（USB 或 Wi-Fi）";
+    statusDetail = "请在电脑上启动桥接程序（USB 或 Wi-Fi）";
     sessions = 0;
     cxMode = M_OFFLINE;
     cxLabel = "未连接";

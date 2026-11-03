@@ -39,6 +39,22 @@ struct MuPeriod {
 MuPeriod muPeriods[4];
 int muPeriod = 0;
 
+// ---------- 排行（mk）：每个周期里各 Agent 花了多少，周期和用量页共用 muPeriod ----------
+struct MkRow {
+  String name, icon, cost, sub;  // "Claude Desktop" / "claude-color" / "$151" / "1570 次 · 1.3M token"
+  uint16_t color = 0;            // magpie 路由页的 Agent 颜色（有 logo 时用 logo 主题色）
+  int err = 0;                   // 失败次数
+  uint16_t w = 0;                // 色条长度 0~1000（按第一名归一化）
+};
+struct MkPeriod {
+  bool has = false;
+  String calls, cost;  // 合计
+  int na = 0;          // 这段时间用到了几个 Agent
+  MkRow r[8];
+  int n = 0;
+};
+MkPeriod mkPeriods[4];
+
 // ---------- 路由（mr）：与 magpie 面板同口径，只看网关请求 ----------
 struct MrRow {
   String agent, icon, model, kind, tm, served, info;
@@ -87,7 +103,7 @@ bool mrListDirty = true;    // 路由列表内容变了，需要重画缓存图�
 bool perfOn = false;                       // 性能计时：开启后每秒经串口报一次各段耗时
 uint32_t perfAcc[4] = {0, 0, 0, 0};       // 0 整帧 1 列表 2 舞台 3 刷屏（微秒累计）
 uint32_t perfN = 0, perfAt = 0;     // 像素风小样开关（目前只影响 magpie 用量页）
-int magTab = 1;              // 当前标签：0 Agent 1 额度 2 用量 3 路由
+int magTab = 1;              // 当前标签：0 排行 1 额度 2 用量 3 路由
 bool magpieOnline = false;   // magpie 网关是否可达（bridge 报告）
 
 // ---------- 像素风配色（ui_pixel.ino）----------
