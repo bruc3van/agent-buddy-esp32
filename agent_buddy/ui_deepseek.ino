@@ -655,7 +655,7 @@ void dsTodayCard(int y) {
   }
   // 底行按重要程度排，放不下就整段丢掉后面的（不滚动、不截半个字）
   String parts[4] = {"输入 " + dsTokIn, "输出 " + dsTokOut, "完成 " + String(done) + " 个", "缓存命中 " + dsHit};
-  if (dsCalls < 0) { parts[0] = "当前会话 " + String(dsSessions) + " 个"; parts[1] = "开着 magpie 看用量"; parts[2] = parts[3] = ""; }
+  if (dsCalls < 0) { parts[0] = "在跑的会话 " + String(dsSessions) + " 个"; parts[1] = "开着 magpie 看用量"; parts[2] = parts[3] = ""; }
   pxText(fitParts(parts, 4, w - 24), x + 12, y + 60, P_DIM, 1);
 }
 

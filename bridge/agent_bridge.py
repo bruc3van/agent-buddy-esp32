@@ -552,7 +552,11 @@ def aggregate(agent="claude"):
             st = effective(s, now)
             if best is None or (PRIORITY[st], s["ts"]) > (PRIORITY[best_state], best["ts"]):
                 best, best_state = s, st
-        active = sum(1 for s in mine if now - s["ts"] < 30 * 60)
+        # 会话数只数正在一轮对话里的（思考、干活、等你确认）：开了没用的空会话、/clear 前留下的不算；
+        # dsh 派出去的子任务也有自己的 session_id（主会话是 session-xxx，子任务是裸 uuid），做完不发 Stop，不算
+        active = sum(1 for sid, s in sessions.items() if s.get("agent", "claude") == agent
+                     and effective(s, now) in ("thinking", "working", "waiting", "compacting")
+                     and not (agent == "deepseek" and not sid.startswith("session-")))
         idle_for = now - last_event_ts[agent]
         dn = done_n.get(agent, 0)
         ld = last_done.get(agent)

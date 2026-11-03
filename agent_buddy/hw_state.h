@@ -9,7 +9,7 @@ volatile uint32_t micStartleAt = 0, micLastSoundMs = 0, micLastOnsetMs = 0, micO
 volatile uint32_t micOnsets[8] = {0};  // 最近 8 个节拍点的时间
 
 // ---------- 设置（ui_settings.ino，存 NVS；声音相关的会经串口 "CFG {...}" 同步给 bridge）----------
-#define FW_VERSION "v4.1.1"
+#define FW_VERSION "v4.2"
 bool cfgSfx = true;       // 提示音
 bool cfgVoice = false;    // 语音播报（默认关：只响提示音 + 屏幕文字）
 bool spkMute = false;     // 静音（音量保留）
