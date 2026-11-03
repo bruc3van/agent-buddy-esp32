@@ -18,11 +18,12 @@
 
 ## Features
 
-- **See what your agents are doing at a glance**: Claude's Clawd and Codex's cloud robot sit at a pixel-art desk, and DeepSeek's little whale lives in a fish tank on the wall. Each has its own animation for thinking, writing code, running commands, waiting for your approval, done and error. The screen border flashes while an agent waits for you.
+- **See what your agents are doing at a glance**: Claude's Clawd and Codex's cloud robot sit at a pixel-art desk, and DeepSeek's little whale lives in a fish tank on the wall. Each has its own animation for thinking, writing code, running commands, waiting for your approval, done and error. Three cards along the bottom of the home screen, one per agent, show status, elapsed time and quota; the monitor on the desk shows the command being run or the file being edited.
+- **The details, too**: the Buddy page shows the running command, what an agent is waiting for and which project it is in; when idle, how long ago the last task finished and how long it took. A notification slides in on any page when an agent needs you, finishes or fails.
 - **Quota at a glance**: 5-hour and 7-day remaining quota for Claude Code and Codex, with reset times; DeepSeek is pay-as-you-go, so it shows your balance, its trend and today's usage (from magpie).
-- **[magpie](https://github.com/yetone/magpie) panel**: the four pages of magpie's menu bar panel (Agents / Quotas / Usage / Routes). The magpie flaps its wings when a new request comes in, and routed requests fly across the Routes page.
+- **[magpie](https://github.com/yetone/magpie) panel**: four pages: Ranking / Quotas / Usage / Routes. Ranking shows how much each agent spent; the magpie flaps its wings when a new request comes in, and routed requests fly across the Routes page.
 - **Sound**: 8-bit notification sounds and optional spoken alerts ("Claude needs your approval: git push", "Task done in 3 minutes"). With a microphone, Clawd sways to music and goes quiet while you talk.
-- **Knows when you're there**: with a mmWave radar, it switches to a standby clock when you leave your seat, greets you when you come back, and tells you when someone stops behind you.
+- **Knows when you're there**: with a mmWave radar, it switches to a standby clock when you leave your seat (quota and today's finished tasks for all three agents; the column of an agent waiting for you flashes), greets you when you come back, and tells you when someone stops behind you.
 - **Works without the cable**: once the board is on Wi-Fi, unplugging USB switches the link to Wi-Fi (mutual authentication + AES-256-GCM). Several computers can be paired, using a 6-digit code shown on screen.
 - **One-command setup** on macOS and Windows: installs, flashes the prebuilt firmware and registers hooks. No Arduino install needed.
 
@@ -32,10 +33,11 @@ Captured directly from the board (480×272, scaled 2×).
 
 | | |
 |:---:|:---:|
-| <img src="docs/images/screen-home.png" width="420"><br>Desk scene: the monitor shows Claude's current state; quota, status and today's magpie usage along the bottom | <img src="docs/images/screen-claude.png" width="420"><br>Claude Code running a command, with 5-hour / 7-day quota |
-| <img src="docs/images/screen-codex.png" width="420"><br>Codex, idle | <img src="docs/images/screen-magpie-agent.png" width="420"><br>magpie · Agents: model and reasoning effort per agent |
-| <img src="docs/images/screen-magpie-usage.png" width="420"><br>magpie · Usage: tokens, requests, cost, cache hit rate | <img src="docs/images/screen-radar.png" width="420"><br>Radar: you at your seat, your blind spot, anyone approaching |
-| <img src="docs/images/screen-settings-pc.png" width="420"><br>Settings · Computers: paired computers and which one is in control | <img src="docs/images/screen-settings-sound.png" width="420"><br>Settings · Sound: volume, sound effects, spoken alerts |
+| <img src="docs/images/screen-home.png" width="420"><br>Desk scene: the monitor splits when Claude and Codex are both working; one card per agent along the bottom | <img src="docs/images/screen-claude.png" width="420"><br>Claude Code running npm test in the agent-buddy project, with 5-hour / 7-day quota |
+| <img src="docs/images/screen-codex.png" width="420"><br>Codex compiling on its laptop; the account is masked by default | <img src="docs/images/screen-deepseek.png" width="420"><br>DeepSeek waiting for your answer, with balance trend and today's usage |
+| <img src="docs/images/screen-magpie-rank.png" width="420"><br>magpie · Ranking: what each agent spent in the last 7 days, and failures | <img src="docs/images/screen-magpie-usage.png" width="420"><br>magpie · Usage: tokens (excluding cache), requests, cost, cache hit rate |
+| <img src="docs/images/screen-radar.png" width="420"><br>Radar: you at your seat, your blind spot, anyone approaching | <img src="docs/images/screen-standby.png" width="420"><br>Standby clock when you leave your seat: quota and today's finished tasks for each agent |
+| <img src="docs/images/screen-settings-conn.png" width="420"><br>Settings · Connection: paired computers and Wi-Fi | <img src="docs/images/screen-settings-sound.png" width="420"><br>Settings · Sound: volume, sound effects, spoken alerts |
 
 ## Photos
 
@@ -100,9 +102,9 @@ Setup creates the Python environment, registers the Claude Code / Codex / DeepSe
 
 ### Unplug USB, use Wi-Fi
 
-Join a network under Settings → Wi-Fi on the board. Starting the bridge with USB plugged in pairs automatically; after that, unplugging the cable switches to Wi-Fi, and plugging it back in switches back to USB. To pair a computer that has no USB connection (a second computer, for example):
+Join a Wi-Fi network under Settings → 连接 (Connection) on the board. Starting the bridge (shown on screen as 桥接程序) with USB plugged in pairs automatically; after that, unplugging the cable switches to Wi-Fi, and plugging it back in switches back to USB. To pair a computer that has no USB connection (a second computer, for example):
 
-1. On the board, open Settings → 电脑 (Computers) → 添加电脑 (Add computer).
+1. On the board, open Settings → 连接 (Connection) → 添加电脑 (Add computer).
 2. On the computer, run:
    ```bash
    bridge/buddy pair --wifi

@@ -16,11 +16,12 @@
 
 ## 它能做什么
 
-- **一眼看到 Agent 在干嘛**：Claude 的 Clawd 和 Codex 的云朵小机器人在像素书桌前，DeepSeek 的小鲸鱼住在墙上的鱼缸里。它们在思考、写代码、运行命令、等你确认、完成或出错时，各有一套动画，等你确认时屏幕边框会闪。
+- **一眼看到 Agent 在干嘛**：Claude 的 Clawd 和 Codex 的云朵小机器人在像素书桌前，DeepSeek 的小鲸鱼住在墙上的鱼缸里。它们在思考、写代码、运行命令、等你确认、完成或出错时，各有一套动画。首页底部三张卡固定对应三个 Agent，显示状态、用时和额度；桌上的显示器显示正在跑的命令或正在改的文件。
+- **知道它具体在做什么**：Buddy 页显示正在跑的命令、等你确认的内容和所在项目；空闲时显示上次完成是多久前、用了多久。等你确认、完成、出错时，任何页面都会滑出一条通知。
 - **额度随时看**：Claude Code 和 Codex 的 5 小时 / 7 天剩余额度、重置时间；DeepSeek 按量计费，显示账户余额、余额走势和今天的用量（来自 magpie）。
-- **[magpie](https://github.com/yetone/magpie) 面板**：还原 magpie 菜单栏面板的 Agent / 额度 / 用量 / 路由四页，新请求进来时喜鹊会扇翅膀、路由页播放光点飞行。
+- **[magpie](https://github.com/yetone/magpie) 面板**：排行 / 额度 / 用量 / 路由四页。排行页按花费列出各 Agent 用了多少；新请求进来时喜鹊会扇翅膀，路由页播放光点飞行。
 - **声音提醒**：8-bit 提示音，可选中文语音播报（「Claude 需要你确认：git push」「任务完成，用时 3 分钟」）。接上麦克风后，Clawd 会跟着音乐摇摆、听到你说话就安静下来。
-- **知道你在不在**：接上毫米波雷达后，离开座位自动切到待机时钟，回来时打招呼，身后有人驻足时提醒你。
+- **知道你在不在**：接上毫米波雷达后，离开座位自动切到待机时钟（三个 Agent 的额度和今天完成数，谁在等你确认那一列就闪），回来时打招呼，身后有人驻足时提醒你。
 - **不插线也能用**：板子连上 Wi-Fi 后，拔掉 USB 自动改走 Wi-Fi（双向认证 + AES-256-GCM 加密）。支持多台电脑，用屏幕验证码配对。
 - **装好就能用**：macOS / Windows 一条命令完成安装、烧录和 hooks 配置，不用装 Arduino。
 
@@ -30,10 +31,11 @@
 
 | | |
 |:---:|:---:|
-| <img src="docs/images/screen-home.png" width="420"><br>桌面首页：显示器上是 Claude 的当前状态，底部是额度、状态和 magpie 今日用量 | <img src="docs/images/screen-claude.png" width="420"><br>Claude Code：正在运行命令，右边是 5 小时 / 7 天额度 |
-| <img src="docs/images/screen-codex.png" width="420"><br>Codex：待命中的云朵小机器人 | <img src="docs/images/screen-magpie-agent.png" width="420"><br>magpie · Agent：各 Agent 的模型和推理强度 |
-| <img src="docs/images/screen-magpie-usage.png" width="420"><br>magpie · 用量：Token、请求数、费用、缓存命中率 | <img src="docs/images/screen-radar.png" width="420"><br>雷达：你在座位上、身后的盲区、有没有人靠近 |
-| <img src="docs/images/screen-settings-pc.png" width="420"><br>设置 · 电脑：Wi-Fi 配对的电脑和控制权 | <img src="docs/images/screen-settings-sound.png" width="420"><br>设置 · 声音：音量、提示音、语音播报 |
+| <img src="docs/images/screen-home.png" width="420"><br>桌面首页：Claude 和 Codex 都在干活时显示器分屏；底部三张卡是三个 Agent 的状态、用时和额度 | <img src="docs/images/screen-claude.png" width="420"><br>Claude Code：在 agent-buddy 项目里跑 npm test，右边是 5 小时 / 7 天额度 |
+| <img src="docs/images/screen-codex.png" width="420"><br>Codex：抱着笔记本编译，账号默认打码 | <img src="docs/images/screen-deepseek.png" width="420"><br>DeepSeek：等你回答问题，右边是余额走势和今天的用量 |
+| <img src="docs/images/screen-magpie-rank.png" width="420"><br>magpie · 排行：这 7 天各 Agent 花了多少、失败几次 | <img src="docs/images/screen-magpie-usage.png" width="420"><br>magpie · 用量：Token（不含缓存）、请求数、费用、缓存命中率 |
+| <img src="docs/images/screen-radar.png" width="420"><br>雷达：你在座位上、身后的盲区、有没有人靠近 | <img src="docs/images/screen-standby.png" width="420"><br>待机时钟：离开座位时出现，三个 Agent 的额度和今天完成数 |
+| <img src="docs/images/screen-settings-conn.png" width="420"><br>设置 · 连接：配对的电脑和 Wi-Fi | <img src="docs/images/screen-settings-sound.png" width="420"><br>设置 · 声音：音量、提示音、语音播报 |
 
 ## 实拍
 
@@ -98,9 +100,9 @@ setup 会依次完成：建 Python 环境 → 注册 Claude Code / Codex / DeepS
 
 ### 拔掉 USB，改用 Wi-Fi
 
-在板子的 设置 → Wi-Fi 里连上网络。插着 USB 启动 bridge 时会自动配对，之后拔掉线就会自动改走 Wi-Fi，插回去再切回 USB。没有 USB 的电脑（比如第二台电脑）这样配对：
+在板子的 设置 → 连接 里连上 Wi-Fi。插着 USB 启动 bridge（屏幕上叫「桥接程序」）时会自动配对，之后拔掉线就会自动改走 Wi-Fi，插回去再切回 USB。没有 USB 的电脑（比如第二台电脑）这样配对：
 
-1. 在板子上打开 设置 → 电脑 → 添加电脑。
+1. 在板子上打开 设置 → 连接 → 添加电脑。
 2. 在电脑上运行：
    ```bash
    bridge/buddy pair --wifi
