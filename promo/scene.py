@@ -434,8 +434,8 @@ def feature(name, side):
     return fn
 
 
-for i, n in enumerate(('buddy_claude', 'buddy_codex', 'buddy_deepseek', 'home_split', 'magpie_agent', 'magpie_usage',
-                       'magpie_route', 'radar', 'standby', 'welcome_back', 'settings_sound', 'settings_pc')):
+for i, n in enumerate(('buddy_claude', 'buddy_codex', 'buddy_deepseek', 'home_split', 'magpie_rank', 'magpie_usage',
+                       'magpie_route', 'radar', 'standby', 'welcome_back', 'settings_sound', 'settings_conn')):
     SHOTS['f_' + n] = feature(n, 1 if i % 2 else -1)
 
 end = SHOTS[SHOT]()

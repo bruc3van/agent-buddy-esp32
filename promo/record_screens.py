@@ -93,7 +93,7 @@ CLIPS = {
     "buddy_claude": (16, lambda: ui(screen=1, agent=0), claude_flow()),
     "buddy_codex": (14, lambda: ui(screen=1, agent=1), codex_flow()),
     "buddy_deepseek": (13, lambda: ui(screen=1, agent=2), deepseek_flow()),
-    "magpie_agent": (6, lambda: ui(screen=2, tab=0), []),
+    "magpie_rank": (6, lambda: ui(screen=2, tab=0, period=0), []),
     "magpie_quota": (6, lambda: ui(screen=2, tab=1), []),
     "magpie_usage": (6, lambda: ui(screen=2, tab=2, period=0), []),
     "magpie_route": (9, lambda: (ui(screen=2, tab=3), post("/replay")), []),
@@ -101,7 +101,7 @@ CLIPS = {
     "standby": (10, lambda: ui(screen=0, standby=1), []),
     "welcome_back": (9, lambda: (ui(screen=0), post("/back")), []),
     "settings_sound": (6, lambda: ui(screen=3, set=0), []),
-    "settings_pc": (6, lambda: ui(screen=3, set=1), []),
+    "settings_conn": (6, lambda: ui(screen=3, set=1), []),
 }
 
 

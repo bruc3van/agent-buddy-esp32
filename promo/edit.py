@@ -491,7 +491,7 @@ def seg_apps(t, d):
     return fr
 
 
-GRID = ['buddy_claude', 'buddy_codex', 'buddy_deepseek', 'magpie_agent', 'radar', 'standby']
+GRID = ['buddy_claude', 'buddy_codex', 'buddy_deepseek', 'magpie_rank', 'radar', 'standby']
 
 
 def seg_grid(t, d):
@@ -659,7 +659,7 @@ SETUP_LINES = [  # 照抄 setup.sh → buddy.py setup 的输出（步骤标题�
     ('  ✓ Python 3.13.14，依赖齐全', (110, 220, 140)),
     ('[2] 注册 Claude Code / Codex / DeepSeek Harness 的 hooks', (130, 170, 255)),
     ('[3] 连接板子', (130, 170, 255)),
-    ('  · 板子上已经是 Agent Buddy 固件 4.1.1，跳过烧录', GREY),
+    ('  · 板子上已经是 Agent Buddy 固件 v4.2，跳过烧录', GREY),
     ('[4] 开机自启', (130, 170, 255)),
     ('[5] 启动并自检', (130, 170, 255)),
     ('  ✓ bridge 已连上板子', (110, 220, 140)),
@@ -737,7 +737,7 @@ TIMELINE = [
     (3.5, seg_3d('f_welcome_back', [(0.3, 3.4, '回来时', '告诉你这段时间完成了什么')], shrink=F_SHRINK, sfx=WELCOME_SFX)),
     (5, seg_grid),
     (4.5, seg_flat('settings_sound', '会出声', '完成、等你确认、出错，各有各的提示音', sfx=SOUND_SFX)),
-    (4, seg_flat('settings_pc', '拔掉线，也在线', '自动切到 Wi-Fi，双向认证 + AES-256-GCM 加密')),
+    (4, seg_flat('settings_conn', '拔掉线，也在线', '自动切到 Wi-Fi，双向认证 + AES-256-GCM 加密')),
     (6, seg_setup),
     (10, seg_3d('turn')),
     (12, seg_specs),
