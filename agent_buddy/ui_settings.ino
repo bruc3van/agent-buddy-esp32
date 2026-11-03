@@ -296,7 +296,7 @@ int drawAboutPane(int y) {
   ry = setInfoRow("作者", "@bruc3van", ry, true);
   pxXLogo(SET_PX + SET_PW - 14 - pxW("@bruc3van", 1) - 18, ry - 30 + 10, P_TEXT);  // X 图标贴在账号左边
   bool br = mode != M_OFFLINE && lastMsgAt;
-  ry = setInfoRow("桥接程序", br ? netLinkText() : String("未连接 · ") + netLinkText(), ry, false);
+  ry = setInfoRow("桥接", br ? netLinkText() : String("未连接 · ") + netLinkText(), ry, false);
   ry = setInfoRow("固件", String(FW_VERSION), ry, false);
   ry = setInfoRow("设备", "JC4827W543 · 4.3 寸", ry, false);
   y = ry + 10;
@@ -426,7 +426,7 @@ int drawPcPane(int y, uint32_t now) {
     pxText("添加电脑（屏幕验证码）", SET_PX + 14, ry + 22, P_TEXT, 1);
     pxText(">", SET_PX + SET_PW - 22, ry + 22, P_DIM, 1);
     setHit(SET_PX, ry, SET_PW, SET_ROW, H_PCADD);
-    y = setFootnote("插着 USB 启动桥接程序时会自动配对", ry + SET_ROW);
+    y = setFootnote("插着 USB 启动桥接时会自动配对", ry + SET_ROW);
   }
   if (pairMsg[0] && now - pairMsgAt < 8000) y = setFootnote(pairMsg, y - 8);
   return y + 8 - y0;
@@ -529,28 +529,23 @@ void drawSidebar() {
 
 // 齿轮（首页状态栏，16×16）
 // 首页状态栏的齿轮：6 个齿（上下各一，斜上斜下各二，间隔 60°），16×16，每格 1px，和旁边 16px 的字一样高
-void drawGearBadge(int x, int y) {
-  static const char *g[16] = {
-    "......####......",
-    "......####......",
-    "....########....",
-    "##.##########.##",
-    "################",
-    ".######..######.",
-    "..####....####..",
-    "..###......###..",
-    "..###......###..",
-    "..####....####..",
-    ".######..######.",
-    "################",
-    "##.##########.##",
-    "....########....",
-    "......####......",
-    "......####......",
+void drawGearBadge(int x, int y) {  // 线框齿轮，11×11 格、每格 2px，和产品标的线宽一致
+  static const char *g[11] = {
+    "...#####...",
+    "..##...##..",
+    "###.....###",
+    "#...###...#",
+    "#..#...#..#",
+    "##.#...#.##",
+    "#..#...#..#",
+    "#...###...#",
+    "###.....###",
+    "..##...##..",
+    "...#####...",
   };
-  for (int r = 0; r < 16; r++)
-    for (int c = 0; c < 16; c++)
-      if (g[r][c] == '#') gfx->drawPixel(x + c, y + r, P_TEXT);
+  for (int r = 0; r < 11; r++)
+    for (int c = 0; c < 11; c++)
+      if (g[r][c] == '#') gfx->fillRect(x + c * 2, y + r * 2, 2, 2, P_TEXT);
 }
 
 // ---------- 整页 ----------

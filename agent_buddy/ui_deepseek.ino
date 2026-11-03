@@ -564,7 +564,7 @@ void dsStatusCard(uint32_t now) {
   String big, small;
   if (m == M_OFFLINE) {
     big = "未连接";
-    small = "在电脑上启动桥接程序";
+    small = "在电脑上启动桥接";
   } else if (poke) {
     big = "噗～";
     small = dsDetail;

@@ -126,7 +126,7 @@ void homeTap(int x, int y) {
     clockPinned = true;
     return;
   }
-  if (y < 40 && homeIconX && x >= homeIconX - 8 && x < homeIconX + 24) {  // 齿轮（四周放宽 8px 好点）
+  if (y < 40 && homeIconX && x >= homeIconX - 8 && x < homeIconX + 30) {  // 齿轮（四周放宽 8px 好点）
     setScreen(SCR_SET);
     return;
   }

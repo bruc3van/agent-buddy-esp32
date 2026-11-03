@@ -72,7 +72,7 @@ enum Mode { M_OFFLINE, M_IDLE, M_SLEEP, M_THINKING, M_WORKING, M_WAITING, M_DONE
 
 Mode mode = M_OFFLINE;
 String label = "未连接";
-String statusDetail = "请在电脑上启动桥接程序（USB 或 Wi-Fi）";
+String statusDetail = "请在电脑上启动桥接（USB 或 Wi-Fi）";
 String tool = "";
 int sessions = 0;
 uint32_t modeSince = 0;     // 进入当前模式的 millis
@@ -995,7 +995,7 @@ void loop() {
     mode = M_OFFLINE;
     modeSince = now;
     label = "未连接";
-    statusDetail = "请在电脑上启动桥接程序（USB 或 Wi-Fi）";
+    statusDetail = "请在电脑上启动桥接（USB 或 Wi-Fi）";
     sessions = 0;
     cxMode = M_OFFLINE;
     cxLabel = "未连接";

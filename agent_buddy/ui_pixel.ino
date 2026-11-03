@@ -369,9 +369,9 @@ void drawHomeTopBar(uint32_t now) {
     rx -= 12;
   }
   // 齿轮：设置入口，不加按钮框
-  rx -= 16;
+  rx -= 22;
   homeIconX = rx;
-  drawGearBadge(rx, 10);
+  drawGearBadge(rx, 8);  // 和产品标同高
   // 异常提示：从齿轮往左排，越靠近齿轮越要紧；记下位置给 homeTap 用
   homeAlertN = 0;
   auto alert = [&](int w, int sec) {
@@ -496,7 +496,7 @@ void drawAgentPanel(int a, uint32_t now) {
   String big, small, tm;  // tm：干活时右下角的用时（副行放正在跑的命令 / 改的文件）
   if (m == M_OFFLINE) {
     big = "未连接";
-    small = "在电脑上启动桥接程序";
+    small = "在电脑上启动桥接";
   } else {
     const char *think = a == 2 ? DS_THINKING : (a ? CX_THINK[(now / 3000) % 4] : THINK_VERBS[(now / 3000) % 6]);
     big = poke ? String(a == 2 ? "噗～" : (a ? "嗨！" : "嘿！")) : (m == M_THINKING ? String(think) : agLabel(a));
@@ -847,7 +847,7 @@ void drawRouteTabPx(uint32_t now) {
     }
     String s = magpieOnline ? "今天还没有请求经过 magpie" : "magpie 未连接";
     pxText(s, 240 - pxW(s, 1) / 2, 214, P_TEXT, 1);
-    String s2 = magpieOnline ? "有请求时会在这里画出路线" : "在电脑上打开 magpie 和桥接程序";
+    String s2 = magpieOnline ? "有请求时会在这里画出路线" : "在电脑上打开 magpie 和桥接";
     pxText(s2, 240 - pxW(s2, 1) / 2, 236, P_DIM, 1);
     return;
   }

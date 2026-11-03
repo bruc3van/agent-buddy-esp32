@@ -102,7 +102,7 @@ Setup creates the Python environment, registers the Claude Code / Codex / DeepSe
 
 ### Unplug USB, use Wi-Fi
 
-Join a Wi-Fi network under Settings → 连接 (Connection) on the board. Starting the bridge (shown on screen as 桥接程序) with USB plugged in pairs automatically; after that, unplugging the cable switches to Wi-Fi, and plugging it back in switches back to USB. To pair a computer that has no USB connection (a second computer, for example):
+Join a Wi-Fi network under Settings → 连接 (Connection) on the board. Starting the bridge (shown on screen as 桥接) with USB plugged in pairs automatically; after that, unplugging the cable switches to Wi-Fi, and plugging it back in switches back to USB. To pair a computer that has no USB connection (a second computer, for example):
 
 1. On the board, open Settings → 连接 (Connection) → 添加电脑 (Add computer).
 2. On the computer, run:
