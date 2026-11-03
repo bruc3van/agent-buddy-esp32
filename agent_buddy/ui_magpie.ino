@@ -58,9 +58,8 @@ bool magpieHandle(const char *t, JsonDocument &doc) {
     P.calls = String(doc["calls"] | "");
     P.csub = String(doc["csub"] | "");
     P.cost = String(doc["cost"] | "");
-    P.gcalls = String(doc["gcalls"] | "");  // 旧 bridge 不发 gcalls：沿用总数
-    P.gcost = String(doc["gcost"] | "");
-    if (!P.gcalls.length()) { P.gcalls = P.calls; P.gcost = P.cost; }
+    P.ssub = String(doc["ssub"] | "");
+    P.hsub = String(doc["hsub"] | "");
     P.hit = String(doc["hit"] | "");
     P.ymax = String(doc["ymax"] | "");
     P.nb = 0;

@@ -287,11 +287,11 @@ void drawBuddySwitch() {
     int n = agSessions(i);
     String t = agTitle(i), ns = n > 1 ? String(n) : "";
     if (on) pxPanel(x + 2, 6, BS_W - 4, 28, c, c, false);
-    int cw = 16 + 6 + pxW(t, 1) + (ns.length() ? 5 + pxW(ns, 1) : 0);  // 图标 16 + 间隔 + 名字 + 数字
+    int cw = 16 + 6 + pxW(t, 1) + (ns.length() ? 5 + pxChipW(ns) : 0);  // 图标 16 + 间隔 + 名字 + 会话数
     int lx = x + BS_W / 2 - cw / 2;
-    drawIcon8(agIcon8(i), lx, 12, 2, fg);
+    drawIcon8(agIcon8(i), lx, 12, 2, on ? P_BG : c);  // 没选中时图标也用品牌色，一眼分得清是谁
     pxText(t, lx + 22, 25, fg, 1);
-    if (ns.length()) pxText(ns, lx + 22 + pxW(t, 1) + 5, 25, on ? P_BG : c, 1);
+    if (ns.length()) pxChip(lx + 22 + pxW(t, 1) + 5, 25, ns, on ? P_BG : P_EDGE, on ? c : P_TEXT);  // 会话数用灰色小标签，红色只留给等你确认
   }
   for (int x = 0; x < 480; x += 4) gfx->fillRect(x, 40, 2, 2, P_GRID);
 }

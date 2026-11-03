@@ -12,7 +12,7 @@ enum {
   H_NONE, H_HOME, H_SEC0,  // H_SEC0..+3：分区
   H_VOL = 10, H_MUTE, H_SFX, H_VOICE, H_DSEC0, H_MREACT = 20, H_MMUTE, H_GREET, H_RSEAT, H_PRIV, H_ROPEN,
   H_SLEEP0 = 26,  // 26~29：熄屏时长
-  H_BRIGHT = 30, H_NIGHT = 32, H_SCENE0 = 34, H_CLOCK = 36, H_MICPAUSE, H_SEATCAL, H_SEATCLR,  // id 都要小于 H_WSCAN
+  H_BRIGHT = 30, H_NIGHT = 32, H_ACCT = 33, H_SCENE0 = 34, H_CLOCK = 36, H_MICPAUSE, H_SEATCAL, H_SEATCLR,  // id 都要小于 H_WSCAN
   H_WSCAN = 40, H_WFORGET, H_WNET = 50,  // H_WNET + i：第 i 个网络
   H_PCADD = 100, H_PCALLOW, H_PCDENY, H_PCPREF, H_PCDEL, H_PC0 = 110,  // 电脑：H_PC0 + i 是第 i 台
 };
@@ -60,6 +60,8 @@ void settingsLoad() {
   cfgGreet = prefs.getBool("greet", true);
   cfgHomeScene = prefs.getBool("scene", true);
   cfgClock = prefs.getBool("clock", true);
+  cfgShowAcct = prefs.getBool("acct", false);
+  homeHandle = prefs.getString("handle", homeHandle);
   cfgRadarSeat = prefs.getBool("rseat", true);
   cfgPrivacy = prefs.getBool("priv", true);
   cfgSleepMin = prefs.getUChar("sleepm", 15);
@@ -81,6 +83,7 @@ void settingsSave() {
   prefs.putBool("greet", cfgGreet);
   prefs.putBool("scene", cfgHomeScene);
   prefs.putBool("clock", cfgClock);
+  prefs.putBool("acct", cfgShowAcct);
   prefs.putBool("rseat", cfgRadarSeat);
   prefs.putBool("priv", cfgPrivacy);
   prefs.putUChar("sleepm", cfgSleepMin);
@@ -124,7 +127,8 @@ void pxToggle(int x, int y, bool on) {
   pxPanel(x, y, 40, 22, c, c, false);
   int kx = on ? x + 21 : x + 3;
   if (on) pxPanel(kx, y + 4, 16, 16, mix565(P_GREEN, P_BG, 110), mix565(P_GREEN, P_BG, 110), false);
-  pxPanel(kx, y + 3, 16, 15, on ? mix565(P_TEXT, P_GREEN, 50) : P_DIM, on ? mix565(P_TEXT, P_GREEN, 50) : P_DIM, false);
+  uint16_t knob = on ? mix565(P_TEXT, P_GREEN, 50) : mix565(P_TEXT, P_DIM, 110);  // 关着的把手也要够亮，开关一眼分得清
+  pxPanel(kx, y + 3, 16, 15, knob, knob, false);
 }
 
 // 滑块：方块轨道 + 白色方块把手；frac 0~1
@@ -172,7 +176,7 @@ int setSliderRow(const String &label, int val, bool dim, int y, int id, bool fir
   if (!first) pxDots(SET_PX + 10, SET_PX + SET_PW - 10, y, P_GRID);
   pxText(label, SET_PX + 14, y + 25, P_TEXT, 1);
   pxSlider(SLIDE_X, y + 11, SLIDE_W, val / 100.0f, dim);
-  String v = dim ? String("静音") : String(val);
+  String v = dim ? String("静音") : String(val) + "%";
   pxText(v, SET_PX + SET_PW - 14 - pxW(v, 1), y + 25, dim ? P_DIM : P_TEXT, 1);
   setHit(SET_PX, y, SET_PW, 40, id);
   return y + 40;
@@ -256,13 +260,14 @@ int drawDisplayPane(int y) {
   y = ry + 10;
 
   y = setGroupHead("界面", y);
-  setGroup(y, 2);
+  setGroup(y, 3);
   ry = y + 2;
   pxText("首页", SET_PX + 14, ry + 22, P_TEXT, 1);
   static const char *const HOME[2] = {"桌面", "卡片"};
   pxSegment(SET_PX + SET_PW - 12 - 2 * 64, ry + 5, 64, 2, HOME, cfgHomeScene ? 0 : 1, H_SCENE0);
   ry += SET_ROW;
   ry = setToggleRow("离开时显示时钟", cfgClock, ry, H_CLOCK, false);
+  ry = setToggleRow("显示完整账号（邮箱）", cfgShowAcct, ry, H_ACCT, false);
   y = ry + 10;
   return y + 8 - y0;
 }
@@ -532,6 +537,7 @@ void drawSettings(uint32_t now) {
     default: h = drawAboutPane(y); break;
   }
   setContentH[setSec] = h;
+  pxScrollbar(476, SET_TOP + 4, 272 - SET_TOP - 8, 272 - SET_TOP - 6, h, setScroll[setSec]);  // 内容比一屏长：右边细滚动条
   // 标题栏盖住滚出去的内容
   gfx->fillRect(SET_SB, 0, 480 - SET_SB, SET_TOP, P_BG);
   pxU(SEC_NAME[setSec], SET_PX + 2, 28, P_TEXT);
@@ -645,6 +651,9 @@ void settingsTap(int x, int y) {
     settingsSave();
   } else if (id == H_CLOCK) {
     cfgClock = !cfgClock;
+    settingsSave();
+  } else if (id == H_ACCT) {
+    cfgShowAcct = !cfgShowAcct;
     settingsSave();
   }
 }

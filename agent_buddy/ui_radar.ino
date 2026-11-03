@@ -100,7 +100,7 @@ String rdAngle(const RadarTarget &t) {
 #define RS_GLOW2 0x1266  // 余辉（中）
 #define RS_GLOW3 0x09C4  // 余辉（远）
 #define RS_LINE  0x12E7  // 距离环、十字线 #165C3A
-#define RS_SHADE 0x0061  // 盲区斜纹（比雷达屏底还暗）
+#define RS_SHADE 0x3186  // 盲区斜纹：灰色，和绿色的视野一眼分得开 #303030
 // 120° 扇形雷达屏（LD2450 只看得到前方左右各 60°）：雷达在屏底中间，正前方朝上。
 // 扫描线在扇形里来回摆（正弦：到两边慢下来再折返），每个方格按「扫描线离开它多久了」来定余辉亮度，
 // 所以折返时两边的余辉也是连续的，不会突然跳到另一边。
@@ -245,10 +245,8 @@ void drawScope(uint32_t now) {
   gfx->fillRect(RS_OX - 5, RS_OY - 6, 10, 4, C_BLUE);
   // 扇形外的四个角。左上是这张图现在画到多远（跟着最远的人自动缩放），右上是雷达本身能看多远（LD2450 手册：6 米、左右各 60°），
   // 两个别混在一起；右下说明盲区斜纹
-  pxText("画面", 10, 62, RS_GLOW1, 1);
-  pxText(String(rdRange / 1000.0f, 1) + " 米", 10, 78, P_GREEN, 1);
-  pxText("雷达能看", 296 - pxW("雷达能看", 1), 62, RS_GLOW1, 1);
-  pxText("6 米 ±60°", 296 - pxW("6 米 ±60°", 1), 78, P_GREEN, 1);
+  // 雷达本身能看多远（6 米 ±60°）放在设置 → 雷达 → 状态里，这里只留画面量程
+  pxText("量程 " + String(rdRange / 1000.0f, 1) + " 米", 10, 62, RS_GLOW1, 1);
   pxText(seatCal ? String("座位已标定") : String("座位 1.5 米"), 10, 262, radarSeatPresent() ? P_GREEN : RS_GLOW1, 1);
   if (shadow) pxText("斜纹: 被你挡住", 296 - pxW("斜纹: 被你挡住", 1), 262, RS_GLOW1, 1);
 }

@@ -169,6 +169,16 @@ void wifiTick() {
         }
     }
   }
+  // 兜底重连：内核碰到认证失败等原因会彻底放弃（开机时路由器没准备好常见），这里隔一阵再试，间隔 15s 起翻倍到 2 分钟
+  static uint32_t wRetryAt = 15000, wRetryGap = 15000;
+  if (wifiUp()) {
+    wRetryGap = 15000;
+    wRetryAt = millis() + wRetryGap;
+  } else if (wSavedSsid.length() && !wConnecting && !wScanning && !wScanPaused && (int32_t)(millis() - wRetryAt) >= 0) {
+    WiFi.begin(wSavedSsid.c_str(), wSavedPass.length() ? wSavedPass.c_str() : nullptr);
+    wRetryGap = min(wRetryGap * 2, (uint32_t)120000);
+    wRetryAt = millis() + wRetryGap;
+  }
   if (wConnecting) {
     if (WiFi.status() == WL_CONNECTED) {
       wConnecting = false;
@@ -208,10 +218,15 @@ const int W_ROW = 36;
 
 // 标题栏右侧的「扫描」按钮
 void drawWifiHeaderBtn() {
-  String sb = wScanning ? "扫描中" : "扫描";
   int bw = 72, bx = SET_PX + SET_PW - bw;
-  pxPanel(bx, 7, bw, 28, wScanning ? P_PANEL : P_ACCENT, wScanning ? P_EDGE : P_ACCENT, false);
-  pxText(sb, bx + bw / 2 - pxW(sb, 1) / 2, 26, wScanning ? P_DIM : P_BG, 1);
+  if (wScanning) {  // 扫描中是状态不是按钮：不画底框，灰字 + 三个依次亮起的点
+    int tw = pxW("扫描中", 1), tx = bx + bw - tw - 16, ph = (millis() / 300) % 4;
+    pxText("扫描中", tx, 26, P_DIM, 1);
+    for (int d = 0; d < 3; d++) gfx->fillRect(tx + tw + 2 + d * 5, 22, 2, 2, d < ph ? P_DIM : P_EDGE);
+  } else {
+    pxPanel(bx, 7, bw, 28, P_ACCENT, P_ACCENT, false);
+    pxText("扫描", bx + bw / 2 - pxW("扫描", 1) / 2, 26, P_BG, 1);
+  }
   setHit(bx, 0, bw, SET_TOP, H_WSCAN);
 }
 

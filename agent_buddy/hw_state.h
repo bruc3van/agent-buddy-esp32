@@ -26,6 +26,8 @@ bool cfgMeetMute = true;   // 有人说话 / 开会时不播报语音
 bool cfgGreet = true;      // 离开回来时打招呼
 bool cfgHomeScene = true;  // 首页：桌面场景（false = 两张卡片）
 bool cfgClock = true;      // 离开电脑时首页显示待机时钟
+bool cfgShowAcct = false;  // 显示完整账号（邮箱）；默认打码，拍照 / 录屏不露邮箱
+String homeHandle = "@bruc3van";  // 首页左上角的 X 账号，空串不显示（串口 {"t":"ui","handle":"@xxx"}）
 
 // ---------- 你在电脑前做什么（hw_act.ino）----------
 enum React { R_NONE, R_STARTLE, R_DANCE, R_TYPE, R_SHH, R_WAVE, R_SLEEP };  // Clawd 对你的反应
@@ -135,6 +137,13 @@ String calibMsg = "";
 bool cfgNightDim = true;   // 夜里（23:00～7:00）自动调暗（存 NVS）
 int doneToday[3] = {0, 0, 0}; // 今天完成的任务数：Claude / Codex / DeepSeek（待机时钟显示）
 int doneDay = -1;          // 计数对应的日期（本地日序号）
+// 三个 Agent 的补充信息（bridge 的 state / cx / ds 消息里带）：在哪个项目、最近一次完成、今天一共干了多久
+String agProj[3];                        // 当前会话的项目名（工作目录最后一级）
+String agLastProj[3];                    // 最近一次完成的是哪个项目
+uint32_t agLastAt[3] = {0, 0, 0};        // 最近一次完成的时刻（epoch 秒），0 = 还没有
+uint32_t agLastDur[3] = {0, 0, 0};       // 那一轮用了几秒
+uint32_t agWorkSec[3] = {0, 0, 0};       // 今天各轮用时加起来（秒）
+String claudeModel = "";                 // Claude Code 当前模型（statusline 给的，如 "Opus 4.5"）
 
 // 麦克风频段（hw_mic.ino）：每块 16ms 算 6 个频点的能量（dB），用来区分人声和其他声音
 const float MIC_FREQ[6] = {250, 500, 1000, 2000, 3000, 5000};

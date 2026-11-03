@@ -70,6 +70,9 @@ void drawClawdThink(uint32_t t) {
   int k = f % 20;  // 这一段的第几帧
   int dots = k < 4 ? 0 : min(3, (k - 4) / 4 + 1);
   cpOrigin(0, 0);
+  // 气泡顶最高到 y=48（Buddy 页标题栏到 42，再留 6px）；放不下就往下压，前半段同时往右挪，尾巴不戳进仰起的头
+  int n2 = 2 * (48 - cpOY), yMin = n2 > 0 ? (n2 + U - 1) / U : n2 / U;  // 向上取整（负数时整除本来就是向上取整）
+  int y1 = max(-13, yMin), y2 = max(-11, yMin);
   cpShadow(0);
   if (!second) {
     // 仰头：身体右上角翘起来，右手托着下巴，左手垂下，眯着眼（左眼低一格，头是歪的）
@@ -88,7 +91,7 @@ void drawClawdThink(uint32_t t) {
     cpR(20, 6, 2, 1, C_CLAUDE);
     cpR(5, 2, 3, 1, C_BLACK);
     cpR(15, 1, 3, 1, C_BLACK);
-    cpThinkBubble(12, -13, k >= 2, true, dots);
+    cpThinkBubble(12 + 2 * (y1 + 13), y1, k >= 2, true, dots);
   } else {
     // 压低身子往上看：头顶露出暗面，眼睛压到身子下半截，左手抬到脸边
     cpR(4, 1, 16, 2, C_CLAWD_SH);
@@ -101,7 +104,7 @@ void drawClawdThink(uint32_t t) {
     cpLegs(14, 2, C_CLAUDE);
     cpR(5, 8, 3, 1, C_BLACK);
     cpR(15, 8, 3, 1, C_BLACK);
-    cpThinkBubble(0, -11, k >= 2, false, dots);
+    cpThinkBubble(0, y2, k >= 2, false, dots);
   }
 }
 
@@ -140,6 +143,7 @@ void drawClawdLaptop(uint32_t t, int dx, bool laptop) {
   int b = ph == 1 ? -1 : 0;  // 敲下去时笔记本弹一下
   cpR(21, 15 + b, 6, 1, C_LAPTOP);  // 底座
   for (int i = 0; i < 5; i++) cpR(26 + i, 14 - i + b, i == 4 ? 1 : 2, 1, C_LAPTOP);  // 斜着打开的屏幕
+  for (int i = 1; i < 4; i++) cpR(25 + i, 14 - i + b, 1, 1, C_THINK);  // 屏幕朝 Clawd 的那面亮着，一眼认得出是笔记本
 }
 
 // ---------- 完成（官方 JumpingHappy）：下蹲 → 双手举过头顶蹦起来 → 顶点 ^^ 晃手 → 落地压扁 → 站稳，约 1.6 秒一次 ----------

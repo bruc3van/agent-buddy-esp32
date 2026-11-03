@@ -8,8 +8,9 @@ String agDetail(int a) { return a == 2 ? dsDetail : (a ? cxDetail : statusDetail
 int agSessions(int a) { return a == 2 ? dsSessions : (a ? cxSessions : sessions); }
 uint32_t agTurnStart(int a) { return a == 2 ? dsTurnStart : (a ? cxTurnStart : turnStart); }
 uint32_t agPokeUntil(int a) { return a == 2 ? dsPokeUntil : (a ? cxPokeUntil : pokeUntil); }
-uint16_t agColor(int a) { return a == 2 ? C_DS : (a ? C_CODEX : C_CLAUDE); }
-uint16_t agHi(int a) { return a == 2 ? C_DS_HI : (a ? C_CODEX_HI : C_CLAUDE); }  // 等你确认时闪的颜色
+// DeepSeek 的界面色用鱼缸水色（青蓝），和 Codex 的蓝拉开；小鲸鱼本身还是 DeepSeek 蓝
+uint16_t agColor(int a) { return a == 2 ? C_DS_WATER : (a ? C_CODEX : C_CLAUDE); }
+uint16_t agHi(int a) { return a == 2 ? C_DS_UI_HI : (a ? C_CODEX_HI : C_CLAUDE); }  // 等你确认时闪的颜色
 const char *agName(int a) { return a == 2 ? "DeepSeek" : (a ? "Codex" : "Claude"); }
 const char *agTitle(int a) { return a == 2 ? "DeepSeek" : (a ? "Codex" : "Claude Code"); }
 Icon8 agIcon8(int a) { return a == 2 ? IC_DS8 : (a ? IC_CODEX8 : IC_CLAWD8); }
@@ -26,6 +27,38 @@ String dsDuration(uint32_t sec) {
   if (sec < 60) return String(sec) + "秒";
   if (sec < 3600) return String(sec / 60) + "分" + String(sec % 60) + "秒";
   return String(sec / 3600) + "小时" + String(sec % 3600 / 60) + "分";
+}
+
+// 秒表写法：1:05 / 1:02:03（状态卡右下角的用时，窄）
+String fmtClock(uint32_t sec) {
+  char b[16];
+  if (sec >= 3600) snprintf(b, sizeof b, "%u:%02u:%02u", (unsigned)(sec / 3600), (unsigned)(sec % 3600 / 60), (unsigned)(sec % 60));
+  else snprintf(b, sizeof b, "%u:%02u", (unsigned)(sec / 60), (unsigned)(sec % 60));
+  return String(b);
+}
+
+// 多久以前：刚刚 / 3 分钟前 / 2 小时前 / 3 天前
+String fmtAgo(uint32_t sec) {
+  if (sec < 60) return "刚刚";
+  if (sec < 3600) return String(sec / 60) + " 分钟前";
+  if (sec < 86400) return String(sec / 3600) + " 小时前";
+  return String(sec / 86400) + " 天前";
+}
+
+// 空闲时状态卡的副行：「上次完成 3 分钟前 · 用时 4分20秒」；还没完成过就用 bridge 给的说明
+String agIdleLine(int a) {
+  uint32_t e = epochNow();
+  if (!agLastAt[a] || !e) return agDetail(a);
+  String s = "上次完成 " + fmtAgo(e > agLastAt[a] ? e - agLastAt[a] : 0);
+  if (agLastDur[a]) s += " · 用时 " + dsDuration(agLastDur[a]);
+  return s;
+}
+
+// 等你确认时的副行：「项目名 · 要确认的内容」，同时开几个项目也知道是哪个在等
+String agWaitLine(int a) {
+  String d = agDetail(a);
+  if (!agProj[a].length()) return d;
+  return d.length() ? agProj[a] + " · " + d : agProj[a];
 }
 
 // 甩尾巴的当前帧（IC_DSTAIL8）：正 → 左 → 正 → 右，每帧 160ms
@@ -543,6 +576,10 @@ void dsStatusCard(uint32_t now) {
       small = m == M_WORKING && dsDetail.length() ? dsDetail + " · " + took : took + " ···";
     } else if (m == M_DONE && dsTurnStart && dsModeSince > dsTurnStart) {
       small = "用时 " + dsDuration((dsModeSince - dsTurnStart) / 1000);
+    } else if (m == M_WAITING) {
+      small = agWaitLine(2);
+    } else if (m == M_IDLE || m == M_SLEEP) {
+      small = agIdleLine(2);
     } else {
       small = dsDetail;
     }
@@ -589,10 +626,10 @@ void dsBalanceCard(int y) {
   uint16_t fc = P_DIM;
   if (!dsBal.length()) foot = "开着 magpie 或设置 API Key 后显示";
   else if (!dsBalOk) { foot = "余额不足，请充值"; fc = P_RED; }
-  else {
-    if (dsGrant.length()) foot += "赠送 " + dsGrant;
-    if (dsTopup.length()) foot += String(foot.length() ? " · " : "") + "充值 " + dsTopup;
-    if (dsPerDay > 0) foot += String(foot.length() ? " · " : "") + "每天约 ¥" + String(dsPerDay, 2);
+  else {  // 按重要程度排，放不下整段丢掉后面的
+    String parts[3] = {dsPerDay > 0 ? "每天约 ¥" + String(dsPerDay, 2) : String(""), dsGrant.length() ? "赠送 " + dsGrant : String(""),
+                       dsTopup.length() ? "充值 " + dsTopup : String("")};
+    foot = fitParts(parts, 3, w - 24);
     if (!foot.length()) foot = "按量计费";
   }
   pxMarquee(foot, x + 12, y + 60, fc, 1, w - 24);
@@ -616,9 +653,10 @@ void dsTodayCard(int y) {
   } else {
     pxDots(x + 12, x + w - 12, y + 45, P_EDGE);
   }
-  String foot = dsCalls >= 0 ? "输入 " + dsTokIn + " · 输出 " + dsTokOut + " · 缓存命中 " + dsHit + " · 完成 " + String(done) + " 个"
-                             : "当前会话 " + String(dsSessions) + " 个 · 开着 magpie 看用量";
-  pxMarquee(foot, x + 12, y + 60, P_DIM, 1, w - 24);
+  // 底行按重要程度排，放不下就整段丢掉后面的（不滚动、不截半个字）
+  String parts[4] = {"输入 " + dsTokIn, "输出 " + dsTokOut, "完成 " + String(done) + " 个", "缓存命中 " + dsHit};
+  if (dsCalls < 0) { parts[0] = "当前会话 " + String(dsSessions) + " 个"; parts[1] = "开着 magpie 看用量"; parts[2] = parts[3] = ""; }
+  pxText(fitParts(parts, 4, w - 24), x + 12, y + 60, P_DIM, 1);
 }
 
 void drawDeepSeekPanel(uint32_t now) {

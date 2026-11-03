@@ -6,7 +6,8 @@
 
 #define C_DS 0x4B5F     // DeepSeek 蓝 #4D6BFE
 #define C_DS_HI 0x8D3F  // 亮蓝（等你确认时闪烁）
-#define C_DS_WATER 0x6E1E  // 水花 / 水面 #6FC3F0
+#define C_DS_WATER 0x6E1E  // 水花 / 水面 #6FC3F0；也是界面上 DeepSeek 的标签色（agColor）
+#define C_DS_UI_HI 0xBF5F  // 界面上等你确认时闪的亮青 #B8E8FA
 
 #define DS_THINKING "深度求索中"  // 思考时的文字，同 DeepSeek 官方
 typedef const char *const *Icon8;  // 8×8 小图标（drawIcon8 用）

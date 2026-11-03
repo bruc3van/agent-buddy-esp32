@@ -81,11 +81,12 @@ void drawMagHeaderPx(uint32_t now) {
   const char *names[4] = {"Agent", "额度", "用量", "路由"};
   for (int i = 0; i < 4; i++) {
     int x = TAB_X + i * TAB_W;
-    String s = names[i];
-    if (i == 0 && maCount) s += " " + String(maCount);
-    if (i == magTab) pxPanel(x + 2, 6, TAB_W - 4, 28, P_ACCENT, P_ACCENT, false);
-    int w = pxW(s, 1);
-    pxText(s, x + TAB_W / 2 - w / 2, 25, i == magTab ? P_BG : P_DIM, 1);
+    bool on = i == magTab;
+    String s = names[i], ns = i == 0 && maCount ? String(maCount) : String("");
+    if (on) pxPanel(x + 2, 6, TAB_W - 4, 28, P_ACCENT, P_ACCENT, false);
+    int w = pxW(s, 1) + (ns.length() ? 5 + pxChipW(ns) : 0), lx = x + TAB_W / 2 - w / 2;
+    pxText(s, lx, 25, on ? P_BG : P_DIM, 1);
+    if (ns.length()) pxChip(lx + pxW(s, 1) + 5, 25, ns, on ? P_BG : P_EDGE, on ? P_ACCENT : P_TEXT);  // 计数统一用小标签
   }
   for (int x = 0; x < 480; x += 4) gfx->fillRect(x, M_TOP - 2, 2, 2, P_GRID);  // 标题栏下的像素虚线
 }
@@ -107,13 +108,13 @@ void drawUsagePx(uint32_t now) {
   // 四个指标：各自一块切角面板
   const char *lab[4] = {"Token", "请求", "费用", "缓存命中率"};
   String val[4] = {P.tok, P.calls, "$" + P.cost.substring(P.cost.startsWith("$") ? 1 : 0), P.hit};
-  String sub[4] = {P.tsub, P.csub, "生效价格", "占提示词"};
+  String sub[4] = {P.tsub, P.csub, P.ssub, P.hsub};
   for (int i = 0; i < 4; i++) {
     int x = 8 + i * 117;
     pxPanel(x, 82, 108, 104, P_PANEL, P_EDGE, true);
     pxText(lab[i], x + 10, 100, P_DIM, 1);
     const int sc = 2;  // 卡片数值统一 22px（同 Buddy 页、雷达页）
-    uint16_t vc = i == 2 ? P_GREEN : (i == 0 ? P_ACCENT : P_TEXT);
+    uint16_t vc = P_TEXT;  // 数值都用白色，只有异常（失败数）才上色
     int vx = x + 10, vy = 130;
     if (i == 2) vx += pxApprox(vx, vy, sc, vc);
     pxText(val[i], vx, vy, vc, sc);
@@ -175,12 +176,13 @@ void pxU(const String &s, int x, int y, uint16_t c) {
     int pw = txtWidth(1, part, 1);
     x += pw >= 0 ? pw : textW(part);
     if (k < 0) break;
+    bool in = x >= txtClipL && x + 13 <= txtClipR;  // 跑马灯裁剪范围外的不画
     if (k == a) {
-      gfx->fillRect(x + 3, y - 6, 2, 2, c);
+      if (in) gfx->fillRect(x + 3, y - 6, 2, 2, c);
       x += 8;
       from = k + strlen("·");
     } else {
-      for (int d = 0; d < 3; d++) gfx->fillRect(x + 1 + d * 4, y - 2, 2, 2, c);
+      if (in) for (int d = 0; d < 3; d++) gfx->fillRect(x + 1 + d * 4, y - 2, 2, 2, c);
       x += 13;
       from = k + strlen("…");
     }
@@ -227,19 +229,59 @@ void pxSegBar(int x, int y, int w, int h, float frac, uint16_t on, uint16_t off)
   for (int i = 0; i < n; i++) gfx->fillRect(x + i * (seg + gap), y, seg, h, i < lit ? on : off);
 }
 
+// 额度剩余的颜色：全屏统一一套阈值（>50% 绿、20~50% 黄、<20% 红）
+uint16_t quotaColor(float left) { return left > 50 ? P_GREEN : (left > 20 ? C_YELLOW : P_RED); }
+
 // 方块圆环：20 个小方块围一圈，从 12 点钟方向顺时针按比例点亮
 void pxRing(int cx, int cy, int left) {
-  bool low = left < 20;
+  uint16_t c = quotaColor(left);
   const int n = 20, r = 19;
   int lit = (n * left + 50) / 100;
   if (left > 0 && lit == 0) lit = 1;
   for (int i = 0; i < n; i++) {
     float a = -PI / 2 + i * 2 * PI / n;
     int x = cx + lround(r * cos(a)) - 2, y = cy + lround(r * sin(a)) - 2;
-    gfx->fillRect(x, y, 5, 5, i < lit ? (low ? 0xFC08 : P_TEXT) : P_EDGE);
+    gfx->fillRect(x, y, 5, 5, i < lit ? c : P_EDGE);
   }
   String s = String(left) + "%";
-  pxText(s, cx - pxW(s, 1) / 2, cy + 4, low ? 0xFC08 : P_TEXT, 1);
+  pxText(s, cx - pxW(s, 1) / 2, cy + 4, c, 1);
+}
+
+// 计数小标签（统一样式）：圆角小方块里一个数字，by 是文字基线。返回宽度
+int pxChip(int x, int by, const String &s, uint16_t fill, uint16_t fg) {
+  int w = max(18, pxW(s, 1) + 8);
+  pxPanel(x, by - 12, w, 16, fill, fill, false);
+  pxText(s, x + w / 2 - pxW(s, 1) / 2, by, fg, 1);
+  return w;
+}
+int pxChipW(const String &s) { return max(18, pxW(s, 1) + 8); }
+
+// 竖向滚动条：内容比可视区高时，在 x 处画一条 2px 的细条（轨道 + 把手）
+void pxScrollbar(int x, int top, int h, int viewH, int contentH, int scroll) {
+  if (contentH <= viewH) return;
+  int th = max(14, h * viewH / contentH);
+  int ty = top + (h - th) * constrain(scroll, 0, contentH - viewH) / (contentH - viewH);
+  gfx->fillRect(x, top, 2, h, P_GRID);
+  gfx->fillRect(x, ty, 2, th, P_DIM);
+}
+
+// 账号打码：bru***@gmail.com（设置 → 显示 →「显示完整账号」打开时原样显示）
+String maskAcct(const String &s) {
+  int at = s.indexOf('@');
+  if (cfgShowAcct || at < 0 || s.lastIndexOf('*', at) >= 0) return s;  // bridge 跟随 magpie「隐藏账号」时已经打过码
+  return s.substring(0, at > 3 ? 3 : 1) + "***" + s.substring(at);
+}
+
+// 按优先级拼一行：parts 从前往后越来越不重要，放不下就整段丢掉后面的，不截半个字
+String fitParts(const String *parts, int n, int maxW) {
+  String out;
+  for (int i = 0; i < n; i++) {
+    if (!parts[i].length()) continue;
+    String t = out.length() ? out + " · " + parts[i] : parts[i];
+    if (pxW(t, 1) > maxW) break;
+    out = t;
+  }
+  return out;
 }
 
 // 像素对话气泡：和面板一样的深色底、2px 细边、切角，左下一条台阶状的小尾巴（同样描边）斜着指向角色
@@ -310,8 +352,10 @@ void drawHomePx(uint32_t now) {
 // 顶部状态栏：X 账号 + 电池 / 齿轮 / 麦克风 / Wi-Fi / 雷达 + 日期时钟（点日期时钟切到待机时钟页）
 void drawHomeTopBar(uint32_t now) {
   // 左：X 账号；右：设置按钮（齿轮 / 麦克风 / Wi-Fi 收在一个按钮里）+ 日期时间。文字统一 16px、同一颜色
-  pxXLogo(14, 12, P_TEXT);
-  pxU("@bruc3van", 34, 24, P_TEXT);
+  if (homeHandle.length()) {
+    pxXLogo(14, 12, P_TEXT);
+    pxU(homeHandle, 34, 24, P_TEXT);
+  }
   int rx = 470;
   uint32_t e = epochNow();
   if (e) {
@@ -333,6 +377,7 @@ void drawHomeTopBar(uint32_t now) {
   // 状态图标：不加底框，和左边的账号、右边的时间同在一条基线上；点齿轮进设置，点麦克风 → 声音，点 Wi-Fi → Wi-Fi，点雷达 → 雷达页
   int bx = rx - HOME_PILL_W;
   homeIconX = bx;
+  pxPanel(bx + 4, 4, 28, 28, P_PANEL, P_EDGE, false);  // 齿轮是入口，加按钮底，和右边几个状态图标区分开
   drawGearBadge(bx + 10, 10);
   drawMicBadge(bx + 36, 10);
   drawWifiBadge(bx + 60, 10);
@@ -371,7 +416,7 @@ void drawHomeCards(uint32_t now) {
   pxText("5h", lx + 14, CY + 214, P_DIM, 1);
   if (h5Used >= 0) {
     float left = constrain(100.0 - h5Used, 0, 100);
-    uint16_t c = left > 50 ? P_GREEN : (left > 20 ? C_YELLOW : P_RED);
+    uint16_t c = quotaColor(left);
     String pct = String((int)(left + 0.5)) + "%";
     int pw = pxW(pct, 1);
     pxSegBar(lx + 34, CY + 205, CW - 34 - 22 - pw, 9, left / 100.0, c, P_EDGE);
@@ -386,15 +431,11 @@ void drawHomeCards(uint32_t now) {
   if (now - homeFlapAt > 4000) homeFlapAt = now;
   drawBirdPx(wag100[wagFrame(now, homeFlapAt)], WAG100_SIZE, rcx - WAG100_SIZE / 2, CY + 26, P_TEXT);
   pxText("magpie", rcx - pxW("magpie", 2) / 2, CY + 162, P_TEXT, 2);
-  String s2 = mrHead;  // 状态 + 关键数字："今天 41 次 · 272K"
-  s2.replace("次调用", "次");
-  s2.replace(" token", "");
-  if (s2.endsWith(" · 0")) s2.remove(s2.length() - strlen(" · 0"));
-  if (!s2.length()) s2 = magpieOnline ? "读取中…" : "未连接";
+  const MuPeriod &T = muPeriods[0];  // 同用量页「今天」：网关 + 会话日志
+  String s2 = T.has ? "今天 " + T.calls + " 次 · " + T.tok : String(magpieOnline ? "读取中…" : "未连接");
   drawStatusLine(s2, rcx, CY + 184, magpieOnline ? P_GREEN : P_DIM, magpieOnline ? P_TEXT : P_DIM);
   pxDots(rx + 12, rx + CW - 12, CY + 194, P_GRID);
   // 迷你数据：今天每小时的用量
-  const MuPeriod &T = muPeriods[0];
   pxText("今天", rx + 14, CY + 214, P_DIM, 1);
   int bx0 = rx + 46, bx1 = rx + CW - 14, base = CY + 216;
   if (T.has && T.nb) {
@@ -421,7 +462,7 @@ void drawQuotaPx(int y, const char *name, float used, uint32_t resetAt) {
     return;
   }
   float left = constrain(100.0 - used, 0, 100);
-  uint16_t c = left > 50 ? P_GREEN : (left > 20 ? C_YELLOW : P_RED);
+  uint16_t c = quotaColor(left);
   String pct = String((int)(left + 0.5)) + "%";
   pxText(pct, x + w - pxW(pct, 2), y + 16, c, 2);
   pxSegBar(x, y + 24, w, 12, left / 100.0, c, P_EDGE);
@@ -469,7 +510,7 @@ void quotaCard(int y, const char *name, float used, uint32_t resetAt, const Stri
     return;
   }
   float left = constrain(100.0f - used, 0.0f, 100.0f);
-  uint16_t c = left > 50 ? P_GREEN : (left > 20 ? C_YELLOW : P_RED);
+  uint16_t c = quotaColor(left);
   String pct = String((int)(left + 0.5f)) + "%";
   pxText(pct, x + w - 12 - pxW(pct, 2), y + 26, c, 2);
   pxSegBar(x + 12, y + 34, w - 24, 10, left / 100.0f, c, P_EDGE);
@@ -478,11 +519,14 @@ void quotaCard(int y, const char *name, float used, uint32_t resetAt, const Stri
   const int fy = y + 60;
   if (resetAt && nowE && resetAt + 600 > nowE) {
     int32_t l = (int32_t)(resetAt - nowE);
-    String lt = l > 0 ? resetWhen(resetAt) + " 重置" : String("正在重置");
+    bool fresh = used <= 0;  // 一点没用：周期还没开始，重置时间没意义
+    String lt = fresh ? String("还没开始用") : l > 0 ? resetWhen(resetAt) + " 重置" : String("正在重置");
     pxText(lt, x + 12, fy, P_DIM, 1);
     // 倒计时只取最大的单位（6 天后 / 4 小时后 / 12 分钟后），一行放得下；账号名放不下就截断加 …
-    String rt = foot.length() ? foot : (l <= 0 ? String("") : l >= 86400 ? String(l / 86400) + " 天后" : l >= 3600 ? String(l / 3600) + " 小时后" : String(max(1, (int)(l / 60))) + " 分钟后");
+    String rt = foot.length() ? foot : (l <= 0 || fresh ? String("") : l >= 86400 ? String(l / 86400) + " 天后" : l >= 3600 ? String(l / 3600) + " 小时后" : String(max(1, (int)(l / 60))) + " 分钟后");
     int rw = x + w - 12 - (x + 12 + pxW(lt, 1) + 10);
+    int k = rt.lastIndexOf(" · ");
+    if (pxW(rt, 1) > rw && k > 0) rt = rt.substring(0, k);  // 放不下先整段丢掉「· 自动」，再不行才截断
     rt = fitPx(rt, rw);
     pxText(rt, x + w - 12 - pxW(rt, 1), fy, P_DIM, 1);
   } else if (resetAt && nowE) {  // 过了重置时间 10 分钟还没收到新数据：上面的百分比是旧的
@@ -504,7 +548,7 @@ void drawAgentPanel(int a, uint32_t now) {
   pxPanel(x + 10, y + 10, 34, 34, P_BG, P_BG, false);
   if (!a && active && !poke) drawSpark(x + 27, y + 27, 12, sparkFrame(now), now / 1600.0f, C_CLAUDE);
   else drawIcon8(agIcon8(a), x + 15, y + 15, 3, m == M_OFFLINE ? P_DIM : acc);
-  String big, small;
+  String big, small, tm;  // tm：干活时右下角的用时（副行放正在跑的命令 / 改的文件）
   if (m == M_OFFLINE) {
     big = "未连接";
     small = "在电脑上启动 bridge";
@@ -512,7 +556,25 @@ void drawAgentPanel(int a, uint32_t now) {
     const char *think = a == 2 ? DS_THINKING : (a ? CX_THINK[(now / 3000) % 4] : THINK_VERBS[(now / 3000) % 6]);
     big = poke ? String(a == 2 ? "噗～" : (a ? "嗨！" : "嘿！")) : (m == M_THINKING ? String(think) : agLabel(a));
     uint32_t ts = agTurnStart(a);
-    small = active && ts ? "已用时 " + fmtDuration((millis() - ts) / 1000) : agDetail(a);
+    String det = agDetail(a);
+    if (poke || m == M_ERROR) {
+      small = det;
+    } else if (active) {
+      if (det.length()) {
+        small = det;
+        if (ts) tm = fmtClock((millis() - ts) / 1000);
+      } else if (ts) {
+        small = "已用时 " + fmtDuration((millis() - ts) / 1000);
+      }
+      if (agProj[a].length() && agSessions(a) > 1) small = agProj[a] + " · " + small;  // 同时开着几个会话：标出是哪个项目
+    } else if (m == M_WAITING) {
+      small = agWaitLine(a);
+    } else if (m == M_DONE) {
+      small = agLastDur[a] ? "这一轮用时 " + dsDuration(agLastDur[a]) : det;
+    } else {
+      small = agIdleLine(a);
+      if (!a && claudeModel.length()) small = claudeModel + " · " + small;
+    }
   }
   const int tx = x + 54, tw = w - 54 - 10;
   int sc = pxW(big, 2) <= tw ? 2 : 1;
@@ -526,11 +588,17 @@ void drawAgentPanel(int a, uint32_t now) {
   } else {
     pxMarquee(big, tx, y + (sc == 2 ? 27 : 23), bc, sc, tw);
   }
-  pxMarquee(small, tx, y + 46, P_DIM, 1, tw);
+  int sw = tw;
+  if (tm.length()) {
+    int w2 = pxW(tm, 1);
+    pxText(tm, x + w - 10 - w2, y + 46, P_DIM, 1);
+    sw = tw - w2 - 8;
+  }
+  pxMarquee(small, tx, y + 46, P_DIM, 1, sw);
   if (a == 2) return;  // DeepSeek 的两张卡由 drawDeepSeekPanel 画
   // 额度卡
   String suf = cxAcctN > 1 ? (cxAcctAuto ? String(" · 自动") : String(" · 手选")) : String("");
-  String acct = a && cxAcct.length() ? cxAcct + suf : String("");
+  String acct = a && cxAcct.length() ? maskAcct(cxAcct) + suf : String("");
   quotaCard(QC_Y1, "5 小时额度剩余", a ? cxH5Used : h5Used, a ? cxH5Reset : h5Reset, acct);
   quotaCard(QC_Y2, "7 天额度剩余", a ? cxD7Used : d7Used, a ? cxD7Reset : d7Reset);
 }
@@ -538,6 +606,24 @@ void drawAgentPanel(int a, uint32_t now) {
 void drawPanelPx(uint32_t now) { drawAgentPanel(0, now); }
 
 // ---------- magpie：Agent ----------
+// 去掉 magpie 没填的占位：「—— · effort high」→「effort high」，「provider ——」→ 空
+String cleanModel(const String &m) {
+  String out, rest = m;
+  while (rest.length()) {
+    int k = rest.indexOf(" · ");
+    String seg = k < 0 ? rest : rest.substring(0, k);
+    rest = k < 0 ? String("") : rest.substring(k + strlen(" · "));
+    seg.trim();
+    String t = seg;
+    t.replace("—", "");
+    t.replace("-", "");
+    t.trim();
+    if (!t.length() || seg.endsWith("—") || seg.endsWith(" -") || seg.endsWith("--")) continue;
+    out += String(out.length() ? " · " : "") + seg;
+  }
+  return out;
+}
+
 void drawAgentsPx() {
   int y = M_TOP + 4 - magScroll[0];
   int h = maCount * 32 + 8;
@@ -556,7 +642,7 @@ void drawAgentsPx() {
     if (i) pxDots(44, 460, ry, P_GRID);
     drawAgentIcon(A.icon, A.name, 18, ry + 8, 16);
     pxU(A.name, 44, ry + 22, A.hidden ? P_DIM : P_TEXT);
-    String m = A.hidden ? String("已隐藏") : A.model;
+    String m = A.hidden ? String("已隐藏") : cleanModel(A.model);
     pxText(m, 460 - pxW(m, 1), ry + 21, P_DIM, 1);
   }
 }
@@ -590,14 +676,10 @@ void drawQuotaTabPx() {
   for (int g = 0; g < mqCount; g++) {
     const MqGroup &G = mqGroups[g];
     drawAgentIcon(G.icon, G.name, 12, y + 6, 16);
-    String nm = G.name;
-    nm.toUpperCase();
+    String nm = G.name;  // 照原样大小写，和其它页的小标题一致
     pxText(nm, 36, y + 20, P_DIM, 1);
     int x = 36 + pxW(nm, 1) + 8;
-    if (G.nc > 1) {
-      pxPanel(x, y + 7, 18, 16, P_EDGE, P_EDGE, false);
-      pxText(String(G.nc), x + 9 - pxW(String(G.nc), 1) / 2, y + 19, P_TEXT, 1);
-    }
+    if (G.nc > 1) pxChip(x, y + 19, String(G.nc), P_EDGE, P_TEXT);
     int cw = pxW("剩余", 1) + 12;
     pxPanel(470 - cw, y + 6, cw, 18, P_EDGE, P_EDGE, false);
     pxText("剩余", 476 - cw, y + 19, P_TEXT, 1);
@@ -607,7 +689,7 @@ void drawQuotaTabPx() {
       const MqCard &C = G.cards[c];
       if (y < 272 && y + 76 > M_TOP) {
         pxPanel(8, y, 464, 72, P_PANEL, P_EDGE, true);
-        pxU(C.user, 22, y + 26, P_TEXT);
+        pxU(maskAcct(C.user), 22, y + 26, P_TEXT);
         pxRefresh(26, y + 47);
         pxText(C.reset, 36, y + 52, P_DIM, 1);
         for (int i = 0; i < C.nw; i++) {
@@ -692,10 +774,10 @@ void drawStagePx(uint32_t now) {
 
   for (int i = 0; i < nA; i++) {
     const MsNode &N = msAgs[i];
-    int w = pxUW(N.name) + 34, x = agX1[i] - w;
+    int w = min(pxUW(N.name), agX1[i] - 16 - 34) + 34, x = agX1[i] - w;  // 最宽到舞台左内沿，放不下跑马灯
     pxPanel(x, agY[i] - 11, w, 22, P_BG, N.color, false);
     drawAgentIcon(N.icon, N.name, x + 7, agY[i] - 7, 14);
-    pxU(N.name, x + 26, agY[i] + 6, P_TEXT);
+    pxUMarquee(N.name, x + 26, agY[i] + 6, P_TEXT, w - 34);
   }
   for (int i = 0; i < nD; i++) {
     const MsNode &N = msDst[i];
@@ -706,8 +788,14 @@ void drawStagePx(uint32_t now) {
     uint16_t dc = N.st == 2 ? P_RED : P_GREEN;
     if (waitD[i]) dc = (now / 250) % 2 ? P_DIM : P_EDGE;
     gfx->fillRect(x + 8, dsY[i] - 3, 6, 6, dc);
-    pxU(N.name, x + 20, dsY[i] + 6, P_TEXT);
-    if (sw) pxText(N.sub, x + 24 + nw, dsY[i] + 5, P_DIM, 1);
+    // 放不下：账号还能留就留，名字跑马灯；名字剩得太窄就不显示账号
+    int room = w - 28, nr = nw;
+    if (nw + sw > room) {
+      if (sw && room - sw >= 48) nr = room - sw;
+      else { sw = 0; nr = room; }
+    }
+    pxUMarquee(N.name, x + 20, dsY[i] + 6, P_TEXT, nr);
+    if (sw) pxText(N.sub, x + 24 + min(nw, nr), dsY[i] + 5, P_DIM, 1);
   }
 
   // 中枢：浅色方块 + 黑色像素喜鹊；忙时方形框往外扩
@@ -800,6 +888,23 @@ void drawRouteTabPx(uint32_t now) {
   magViewH[3] = 272 - LIST_TOP;
   magContentH[3] = mrCount * 50 + 10;
   gfx->fillScreen(P_BG);
+  if (!msAgN && !mrCount) {  // 空状态：和宠物们一样用角色说话——喜鹊在打盹，不画空的连线舞台
+    if ((now / 600) % 2 || !magpieOnline) gfx->fillRect(12, 50, 8, 8, magpieOnline ? P_GREEN : P_DIM);
+    gfx->setFont(u8g2_font_unifont_h_chinese4);
+    gfx->setTextSize(1);
+    printDots(mrHead.length() ? mrHead : String("未连接"), 28, 61, P_TEXT);
+    pxPanel(8, 72, 464, 192, P_PANEL, P_EDGE, true);
+    drawBirdPx(wag100[0], WAG100_SIZE, 240 - WAG100_SIZE / 2, 82 + (int)(2 * sinf(now / 900.0f)), P_DIM);  // 慢慢起伏，像在呼吸
+    for (int i = 0; i < 3; i++) {
+      uint32_t zt = (now + i * 900) % 2700;
+      if (magpieOnline) pxText("z", 300 + i * 8 + (int)(zt / 200), 110 - (int)(zt / 80) - i * 4, P_DIM, 1 + (i == 2));
+    }
+    String s = magpieOnline ? "今天还没有请求经过 magpie" : "magpie 未连接";
+    pxText(s, 240 - pxW(s, 1) / 2, 214, P_TEXT, 1);
+    String s2 = magpieOnline ? "有请求时会在这里画出路线" : "在电脑上打开 magpie 和 bridge";
+    pxText(s2, 240 - pxW(s2, 1) / 2, 236, P_DIM, 1);
+    return;
+  }
   uint32_t t0 = micros();
   routeListBlit(LIST_TOP);
   // 没有请求时，空状态只在上方舞台里说一次，列表区不再重复
@@ -823,6 +928,7 @@ void drawMagpiePx(uint32_t now) {
     if (magTab == 0) drawAgentsPx();
     else if (magTab == 1) drawQuotaTabPx();
     else drawRouteTabPx(now);
+    if (magTab < 2) pxScrollbar(477, M_TOP + 4, 272 - M_TOP - 8, magViewH[magTab], magContentH[magTab], magScroll[magTab]);  // 下面还有：右边一条细滚动条
   }
   drawMagHeaderPx(now);
 }

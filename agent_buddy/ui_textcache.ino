@@ -95,17 +95,36 @@ bool txtDraw(uint8_t font, const String &s, int x, int y, uint16_t color, int sc
 }
 
 // 跑马灯：放得下就照常画；放不下就在 maxW 宽的范围里循环滚动（开头停 1.5 秒再滚，每秒 25 像素），不再截成「…」
+// 跑马灯这一刻往左移了多少：先停 1.5 秒，再匀速滚完一圈（period = 文字宽 + 间隔）
+int marqueeOff(int period) {
+  const int PAUSE = 1500, SPEED = 25;
+  uint32_t t = millis() % (PAUSE + (uint32_t)period * 1000 / SPEED);
+  return t < PAUSE ? 0 : (int)((t - PAUSE) * SPEED / 1000);
+}
+
 void pxMarquee(const String &s, int x, int y, uint16_t c, int scale, int maxW) {
   int tw = pxW(s, scale);
   if (tw <= maxW) { pxText(s, x, y, c, scale); return; }
-  const int PAUSE = 1500, SPEED = 25;
   int period = tw + 24 * scale;
-  uint32_t t = millis() % (PAUSE + (uint32_t)period * 1000 / SPEED);
-  int off = t < PAUSE ? 0 : (int)((t - PAUSE) * SPEED / 1000);
+  int off = marqueeOff(period);
   txtClipL = max(0, x);
   txtClipR = min(480, x + maxW);
   pxText(s, x - off, y, c, scale);
   if (period - off < maxW) pxText(s, x - off + period, y, c, scale);
+  txtClipL = 0;
+  txtClipR = 480;
+}
+
+// 同上，16px 的 unifont（路由舞台的 Agent / 服务方名字）
+void pxUMarquee(const String &s, int x, int y, uint16_t c, int maxW) {
+  int tw = pxUW(s);
+  if (tw <= maxW) { pxU(s, x, y, c); return; }
+  int period = tw + 24;
+  int off = marqueeOff(period);
+  txtClipL = max(0, x);
+  txtClipR = min(480, x + maxW);
+  pxU(s, x - off, y, c);
+  if (period - off < maxW) pxU(s, x - off + period, y, c);
   txtClipL = 0;
   txtClipR = 480;
 }

@@ -144,6 +144,15 @@ uint32_t epochNow() {
 // ---------- 串口协议 ----------
 String lineBuf;
 
+// state / cx / ds 消息里的补充字段（旧 bridge 不发，保持默认）
+void agExtraFrom(int a, JsonVariantConst d) {
+  agProj[a] = String(d["proj"] | "");
+  agLastAt[a] = d["ld"] | 0;
+  agLastDur[a] = d["ldd"] | 0;
+  agLastProj[a] = String(d["ldp"] | "");
+  agWorkSec[a] = d["wk"] | 0;
+}
+
 void handleLine(const String &line) {
   JsonDocument doc;
   if (deserializeJson(doc, line)) return;
@@ -169,6 +178,7 @@ void handleLine(const String &line) {
     tool = String(doc["tool"] | "");
     sessions = doc["sessions"] | 0;
     doneSeqSet(0, doc["dn"] | -1L);
+    agExtraFrom(0, doc.as<JsonVariantConst>());
   } else if (!strcmp(t, "cx")) {  // Codex 的状态
     Mode m = parseMode(doc["state"] | "idle");
     bool busy = m == M_THINKING || m == M_WORKING || m == M_WAITING || m == M_COMPACT;
@@ -180,6 +190,7 @@ void handleLine(const String &line) {
     cxDetail = String(doc["detail"] | "");
     cxSessions = doc["sessions"] | 0;
     doneSeqSet(1, doc["dn"] | -1L);
+    agExtraFrom(1, doc.as<JsonVariantConst>());
   } else if (!strcmp(t, "ds")) {  // DeepSeek Harness 的状态
     Mode m = parseMode(doc["state"] | "idle");
     bool busy = m == M_THINKING || m == M_WORKING || m == M_WAITING || m == M_COMPACT;
@@ -192,6 +203,7 @@ void handleLine(const String &line) {
     dsTool = String(doc["tool"] | "");
     dsSessions = doc["sessions"] | 0;
     doneSeqSet(2, doc["dn"] | -1L);
+    agExtraFrom(2, doc.as<JsonVariantConst>());
   } else if (!strcmp(t, "dsusage")) {  // DeepSeek 账户余额（magpie 或 API Key）
     dsBal = String(doc["bal"] | "");
     dsBalOk = (doc["ok"] | 1) == 1;
@@ -256,6 +268,10 @@ void handleLine(const String &line) {
     if (doc["mic"].is<int>()) micBar = (int)doc["mic"] == 1;  // 麦克风调试：串口报音量
     if (doc["vol"].is<int>() && !doc["beep"].is<int>()) spkSetVolume(doc["vol"]);  // 喇叭音量 0~100
     settingsFromJson(doc);
+    if (doc["handle"].is<const char *>()) {  // 首页左上角的 X 账号，空串不显示
+      homeHandle = String((const char *)doc["handle"]).substring(0, 24);
+      prefs.putString("handle", homeHandle);
+    }
     if (doc["react"].is<int>() || doc["standby"].is<int>() || doc["rdemo"].is<int>() || doc["cmode"].is<int>()) {  // 调试：强制显示 15 秒
       dbgReact = doc["react"] | 0;
       dbgMode = doc["cmode"] | -1;
@@ -295,6 +311,7 @@ void handleLine(const String &line) {
   } else if (!strcmp(t, "usage")) {
     if (doc["h5"].is<float>()) { h5Used = doc["h5"]; h5Reset = doc["h5r"] | 0; }
     if (doc["d7"].is<float>()) { d7Used = doc["d7"]; d7Reset = doc["d7r"] | 0; }
+    if (doc["model"].is<const char *>()) claudeModel = String((const char *)doc["model"]);
   }
 }
 

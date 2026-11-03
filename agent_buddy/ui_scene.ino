@@ -403,7 +403,7 @@ void drawSceneClawd(uint32_t now) {
   if (react == R_SLEEP) { m = M_SLEEP; react = R_NONE; }
   else if (react) m = M_IDLE;
   int oU = U, oCX = CX, oBASE = BASE;
-  U = 5; CX = 100; BASE = DESK_Y;  // 和喜鹊、鱼缸里的小鲸鱼差不多大
+  U = 6; CX = 100; BASE = DESK_Y;  // 和旁边的 Codex 差不多高（U=5 时明显比它小一圈）
   int top = BASE - 8 * U;
   // 思考 / 干活 / 完成 / 出错：和 Buddy 页一样照官方逐帧动作（ui_clawd.ino）；干活时侧身对着右边的显示器敲，不画笔记本
   if (m == M_THINKING || m == M_WORKING || m == M_DONE || m == M_ERROR) {
@@ -499,7 +499,7 @@ void dockQuotaLine(const char *name, uint16_t tint, float used, int x, int y, in
 
 // 一行余额：DeepSeek 没有额度窗口，右边直接写余额
 void dockBalLine(int x, int y, int w) {
-  gfx->fillRect(x, y - 8, 6, 6, C_DS);
+  gfx->fillRect(x, y - 8, 6, 6, agColor(2));
   pxText("DeepSeek", x + 10, y, P_DIM, 1);
   pxText(dsBal, x + w - pxW(dsBal, 1), y, dsBalOk ? P_GREEN : P_RED, 1);
 }
@@ -544,9 +544,9 @@ void drawDock(uint32_t now) {
   pxPanel(x, DOCK_Y, w, DOCK_H, P_PANEL, P_EDGE, true);
   drawBirdPx(wag28[0], WAG28_SIZE, x + 6, DOCK_Y + 7, magpieOnline ? P_TEXT : P_DIM);
   const MuPeriod &T = muPeriods[0];
-  String s1 = !magpieOnline ? String("未连接") : (T.has ? T.gcalls + " 次请求" : String("读取中…"));  // 网关请求，同路由页
+  String s1 = !magpieOnline ? String("未连接") : (T.has ? T.calls + " 次请求" : String("读取中…"));  // 同用量页「今天」：网关 + 会话日志
   pxMarquee(s1, x + 40, DOCK_Y + 18, magpieOnline ? P_TEXT : P_DIM, 1, w - 46);
-  if (T.has) pxMarquee("今天花费 " + T.gcost, x + 40, DOCK_Y + 35, P_DIM, 1, w - 46);
+  if (T.has) pxMarquee("今天花费 " + T.cost, x + 40, DOCK_Y + 35, P_DIM, 1, w - 46);
 }
 
 // ---------- 鱼缸：DeepSeek 的小鲸鱼住在墙上的鱼缸里，位置大小和左边的窗户左右对称 ----------
@@ -751,32 +751,27 @@ void drawStandbyClock(uint32_t now) {
   pxText(t.date, 240 - pxW(t.date, 2) / 2, 44, P_DIM, 2);
   drawFlipCard(0, t.hh, prevHH, now - flipH);
   drawFlipCard(1, t.mm, prevMM, now - flipM);
-  uint16_t dot = (now / 1000) % 2 ? P_EDGE : P_BG;  // 冒号
+  uint16_t dot = (now / 1000) % 2 ? P_DIM : P_EDGE;  // 冒号：亮的时候要看得见，暗的时候也不完全消失
   gfx->fillRect(237, FC_Y + FC_H / 2 - 22, 6, 6, dot);
   gfx->fillRect(237, FC_Y + FC_H / 2 + 16, 6, 6, dot);
   sbSleepers(90, 420, FC_Y, 4, now);
   sbMagpie(362, FC_Y - 26, now);
-  // 每张卡片下面：这一方的额度 + 今天完成了几个任务；最下面一行居中是 magpie
+  // 离座时是远看：每张卡片下面只放两行——额度条、今天完成几个（16px 大字）；DeepSeek 只在等你确认时占最后一行
   for (int a = 0; a < 2; a++) {
-    sbQuota(a, FC_X[a], 218, FC_W);
+    sbQuota(a, FC_X[a], 222, FC_W);
     int n = doneDay == t.days ? doneToday[a] : 0;
-    String d = n ? "今天完成 " + String(n) + " 个任务" : String("今天还没有完成任务");
-    pxText(d, FC_X[a] + 10, 235, n ? P_TEXT : P_DIM, 1);
+    String d = n ? "今天完成 " + String(n) + " 个" : String("今天还没完成任务");
+    uint32_t wk = agWorkSec[a];
+    if (n && wk >= 60) {  // 放得下就带上今天一共干了多久
+      String w2 = "完成 " + String(n) + " 个，共 " + (wk < 3600 ? String(wk / 60) + " 分钟" : String(wk / 3600) + "小时" + String(wk % 3600 / 60) + "分");
+      if (pxUW(w2) <= FC_W - 20) d = w2;
+    }
+    pxU(d, FC_X[a] + 10, 244, n ? P_TEXT : P_DIM);
   }
-  // 最下面一行：DeepSeek（连着才显示）+ magpie，各带一个颜色方块，整行居中
-  const MuPeriod &T = muPeriods[0];
-  String mg = !magpieOnline ? String("magpie 未连接") : (T.has ? "magpie " + T.gcalls + " 次请求 · " + T.gcost : String("magpie 读取中…"));
-  String ds;
-  uint16_t dc = P_DIM;
-  if (dsMode == M_WAITING) { ds = "DeepSeek 需要你确认"; dc = C_DS_HI; }
-  else if (dsMode != M_OFFLINE || doneTodayOf(2)) ds = "DeepSeek 今天完成 " + String(doneTodayOf(2)) + " 个";
-  int dw = ds.length() ? pxW(ds, 1) + 10 + 16 : 0;
-  int mw = pxW(mg, 1) + 10, mx = 240 - (dw + mw) / 2;
-  if (ds.length()) {
-    gfx->fillRect(mx, 252 - 8, 6, 6, C_DS);
-    pxText(ds, mx + 10, 252, dc, 1);
-    mx += dw;
+  if (dsMode == M_WAITING) {
+    String ds = "DeepSeek 需要你确认";
+    int mx = 240 - (pxW(ds, 1) + 10) / 2;
+    gfx->fillRect(mx, 264 - 8, 6, 6, agColor(2));
+    pxText(ds, mx + 10, 264, agHi(2), 1);
   }
-  gfx->fillRect(mx, 252 - 8, 6, 6, P_ACCENT);
-  pxText(mg, mx + 10, 252, P_DIM, 1);
 }

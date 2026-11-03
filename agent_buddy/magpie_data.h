@@ -26,10 +26,10 @@ int mqCount = 0;
 // ---------- 用量（mu），4 个周期：今天 / 7 天 / 30 天 / 全部 ----------
 struct MuPeriod {
   bool has = false;
-  String tok, tsub;    // "12M" / "输入 106 · 输出 30.4K · 缓存 12M"
+  String tok, tsub;    // "236K"（输入 + 输出，不算缓存）/ "输入 106 · 输出 30.4K · 缓存 12M"
   String calls, csub;  // "52" / "没有失败"
   String cost, hit;    // "≈$3.59" / "99%"
-  String gcalls, gcost;  // 只算经过网关的请求数 / 费用：首页用，和路由页同口径
+  String ssub, hsub;   // 费用、命中率下面的小字："每次约 $0.054" / "读缓存 24M"
   String ymax;         // 纵轴最大值 "20M"
   uint16_t bars[60];   // 0~1000，按 ymax 归一化
   int nb = 0;

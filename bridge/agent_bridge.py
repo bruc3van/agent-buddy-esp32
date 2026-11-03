@@ -91,6 +91,8 @@ last_event_ts = {"claude": time.time(), "codex": time.time(), "deepseek": time.t
 AGENT_NAME = {"claude": "Claude", "codex": "Codex", "deepseek": "DeepSeek"}
 SFX_PREFIX = {"codex": "c", "deepseek": "d"}  # 板子上每个 Agent 一套音色：音效名前加这个前缀
 done_n = {"claude": 0, "codex": 0, "deepseek": 0}  # bridge 启动以来每个 Agent 收到几次 Stop；板子按增量记「今天完成」，汇总状态会把并发完成合并掉
+last_done = {}  # 每个 Agent 最近一次完成：(时刻, 这一轮用了几秒, 项目名)
+work_day = {"day": "", "claude": 0, "codex": 0, "deepseek": 0}  # 今天每个 Agent 一共干了几秒（各轮用时相加）
 
 
 _log_lock = threading.Lock()
@@ -451,6 +453,9 @@ def handle_hook(ev, agent="claude"):
     # 是否在一轮对话里：空闲时后台压缩上下文也会发 PreCompact / SubagentStop / PostCompact，
     # 之后没有 Stop 收尾，不能把它们当成「思考中」，否则要等 STALE_ACTIVE 才回到待命
     busy = bool(prev and prev.get("busy"))
+    cwd = ev.get("cwd") or ""
+    proj = os.path.basename(cwd.rstrip("/\\")) if cwd else (prev or {}).get("proj", "")  # 项目名：工作目录的最后一级
+    t0 = (prev or {}).get("t0", 0)  # 这一轮从什么时候开始（用户发出提问）
 
     if name == "SessionStart":
         if ev.get("source") == "compact" and busy:
@@ -459,6 +464,8 @@ def handle_hook(ev, agent="claude"):
         busy = False
     elif name == "UserPromptSubmit":
         rec = ("thinking", "思考中", ev.get("prompt", ""), "")
+        if not busy:
+            t0 = now
         busy = True
     elif name == "PreToolUse":
         label, detail = tool_label(tool, ev.get("tool_input"))
@@ -509,10 +516,17 @@ def handle_hook(ev, agent="claude"):
     state, label, detail, tool = rec
     detail = truncate(redact(detail))
     with lock:
-        sessions[sid] = {"state": state, "label": label, "detail": detail, "tool": tool, "ts": now, "agent": agent, "busy": busy}
+        sessions[sid] = {"state": state, "label": label, "detail": detail, "tool": tool, "ts": now, "agent": agent, "busy": busy,
+                         "proj": fit(proj, 24), "t0": t0 if busy else 0}
         last_event_ts[agent] = now
         if state == "done":
             done_n[agent] = done_n.get(agent, 0) + 1
+            dur = int(now - t0) if t0 else 0
+            last_done[agent] = (int(now), dur, fit(proj, 24))
+            day = time.strftime("%Y-%m-%d")
+            if work_day["day"] != day:
+                work_day.update(day=day, claude=0, codex=0, deepseek=0)
+            work_day[agent] = work_day.get(agent, 0) + dur
     log(f"{name:<18} {agent[:2]} {sid[:8]} -> {state} {label} {detail}")
 
 
@@ -546,18 +560,22 @@ def aggregate(agent="claude"):
         active = sum(1 for s in mine if now - s["ts"] < 30 * 60)
         idle_for = now - last_event_ts[agent]
         dn = done_n.get(agent, 0)
+        ld = last_done.get(agent)
+        extra = {"dn": dn, "proj": best.get("proj", "") if best else "",
+                 "ld": ld[0] if ld else 0, "ldd": ld[1] if ld else 0, "ldp": ld[2] if ld else "",
+                 "wk": work_day.get(agent, 0) if work_day["day"] == time.strftime("%Y-%m-%d") else 0}
     for sid in gone:
         forget(sid)
 
     if best_state == "idle":
         if idle_for > SLEEP_AFTER:
             return {"state": "sleep", "label": "休息中", "detail": f"已空闲 {int(idle_for // 60)} 分钟", "tool": "", "sessions": active,
-                    "dn": dn}
+                    **extra}
         label = best["label"] if best and best["state"] == "idle" else "待命中"
         detail = best["detail"] if best and best["state"] == "idle" else "随时可以开始"
-        return {"state": "idle", "label": label, "detail": detail, "tool": "", "sessions": active, "dn": dn}
+        return {"state": "idle", "label": label, "detail": detail, "tool": "", "sessions": active, **extra}
     return {"state": best_state, "label": best["label"], "detail": best["detail"], "tool": best["tool"], "sessions": active,
-            "dn": dn}
+            **extra}
 
 
 def handle_usage(data):
@@ -1145,7 +1163,7 @@ def pump(link):
                 u = dict(usage)
                 cxu = {k: v for k, v in codex_usage.items() if k != "_at"}
                 dsu = dict(ds_balance)
-            cur = {k: u[k] for k in ("h5", "h5r", "d7", "d7r") if k in u}
+            cur = {k: u[k] for k in ("h5", "h5r", "d7", "d7r", "model") if k in u}
             if ok and "h5" in u and (cur != last_usage or now - last_usage_sent > 60):  # 变了立刻发
                 ok = link.send({"t": "usage", **cur})
                 if ok:
@@ -1405,25 +1423,31 @@ def build_quotas():
 
 def build_usage(i, period):
     """与 magpie 面板「用量」页同口径：网关 + 会话日志，取接口给的总数。"""
-    d = mget(f"usage/requests?period={period}&limit=1")
+    d = mget(f"usage/requests?period={period}&limit={20 if i == 0 else 1}")
     s = d.get("series") or []
+    if i == 0:  # Claude 当前模型：statusline 只有命令行版会发，桌面版靠 magpie 里最近一条 Claude 请求
+        m = next((r.get("served") or r.get("model") for r in d.get("rows") or [] if str(r.get("agent", "")).startswith("claude")), "")
+        mm = re.match(r"claude-([a-z]+)-(\d+)(?:-(\d{1,2}))?(?:-|$)", m or "")
+        if mm:
+            with lock:
+                usage["model"] = mm.group(1).capitalize() + " " + mm.group(2) + ("." + mm.group(3) if mm.group(3) else "")
     inp, out = d.get("input") or 0, d.get("output") or 0
     cr, cw = d.get("cache_read") or 0, d.get("cache_write") or 0
     errs, cost = d.get("errors") or 0, d.get("cost") or 0
     cached, prompt = cr + cw, inp + cr + cw
-    per = [(x.get("input") or 0) + (x.get("output") or 0) + (x.get("cache_read") or 0) + (x.get("cache_write") or 0) for x in s]
+    per = [(x.get("input") or 0) + (x.get("output") or 0) for x in s]  # 缓存读动辄是输入输出的上百倍，算进来就看不出实际消耗
     top = nice_max(max(per or [0]))
     n = len(s)
     idx = sorted({min(n - 1, k * n // 4) for k in range(4)} | {n - 1}) if n > 1 else list(range(n))
     tsub = f"输入 {short_num(inp)} · 输出 {short_num(out)}" + (f" · 缓存 {short_num(cached)}" if cached else "")
-    th = d.get("through") or {}  # 只算经过网关的：首页「今天 N 次请求」和路由页同口径（会话日志里的本地会话不算）
     return {
         "t": "mu", "p": i,
-        "tok": short_num(inp + out + cached), "tsub": tsub,
+        "tok": short_num(inp + out), "tsub": tsub,
         "calls": str(d.get("calls") or 0), "csub": "没有失败" if not errs else f"{errs} 次失败",
         "cost": fmt_cost(cost) if cost else "—",
-        "gcalls": str(th.get("calls") or 0), "gcost": fmt_cost(th["cost"]) if th.get("cost") else "—",
         "hit": f"{round(100 * cr / prompt)}%" if prompt else "—",
+        "ssub": f"每次约 {fmt_cost(cost / d['calls'])}" if cost and d.get("calls") else "",
+        "hsub": f"读缓存 {short_num(cr)}" if cr else "",
         "ymax": short_num(top), "bars": [round(1000 * v / top) for v in per][-60:],
         "xl": [axis_label(s[k].get("label"), d.get("bucket")) for k in idx],
     }
@@ -1476,6 +1500,12 @@ def build_routes(_today_tokens=None):
     head = f"今天 {today.get('calls') or 0} 次调用 · {short_num((today.get('input') or 0) + (today.get('output') or 0))} token"
     d = mget("usage/requests?period=today&limit=12&via=through")
     raw = d.get("rows") or []
+    local_only = not raw  # 今天没有请求经过网关：改列会话日志里的请求，不播飞行动画（它们没走 magpie）
+    if local_only:
+        d = mget("usage/requests?period=today&limit=12")
+        raw = d.get("rows") or []
+        if raw:
+            head = f"今天 {d.get('calls') or 0} 次 · {short_num((d.get('input') or 0) + (d.get('output') or 0))} token · 未经网关"
 
     rows = []
     for r in raw[:8]:
@@ -1497,12 +1527,12 @@ def build_routes(_today_tokens=None):
     ags, dst = [], []
     for r in raw:
         if r.get("agent") not in [a["id"] for a in ags] and len(ags) < 3:
-            ags.append({"id": r.get("agent"), "n": fit(r.get("agentName") or r.get("agent"), 14), "i": r.get("icon") or "",
+            ags.append({"id": r.get("agent"), "n": fit(r.get("agentName") or r.get("agent"), 32),  # 放不下屏幕跑马灯 "i": r.get("icon") or "",
                         "c": hue565(r.get("agent"))})
         key = r.get("provider") or "?"
         if key not in [x["id"] for x in dst] and len(dst) < 3:
             bad = (r.get("status") or 0) >= 400 or bool(r.get("error"))
-            dst.append({"id": key, "n": fit(r.get("providerName") or key, 10), "s": fit(r.get("providerAccount") or "", 14),
+            dst.append({"id": key, "n": fit(r.get("providerName") or key, 32), "s": fit(r.get("providerAccount") or "", 24),
                         "st": 2 if bad else 1})
 
     # 新完成的请求：交给屏幕按 magpie 的方式播放（光点 Agent → magpie → 服务方 → 等回答 → 原路返回）
@@ -1514,7 +1544,7 @@ def build_routes(_today_tokens=None):
         route_seen[rid] = 1
         while len(route_seen) > 500:
             route_seen.pop(next(iter(route_seen)), None)  # /replay 可能同时在删
-        if not route_primed:
+        if not route_primed or local_only:
             continue
         ai = next((i for i, a in enumerate(ags) if a["id"] == r.get("agent")), -1)
         di = next((i for i, x in enumerate(dst) if x["id"] == (r.get("provider") or "?")), -1)
@@ -1956,7 +1986,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         u = urlparse(self.path)
         try:
-            fn(u.path, parse_qs(u.query))
+            fn(u.path, parse_qs(u.query, keep_blank_values=True))  # 保留空值：/ui?handle= 表示清空
         except Exception as e:  # noqa: BLE001 —— 出错也要回一个响应，调用方不至于等到超时
             log(f"http {self.command} {u.path} failed: {e!r}"[:200])
             try:
@@ -1979,6 +2009,8 @@ class Handler(BaseHTTPRequestHandler):
             self._reply(200 if ok else 503, f"gamma={g}" if ok else "串口未连接")
         elif path == "/ui":
             cmd = {k: int(v[0]) for k, v in q.items() if v[0].lstrip("-").isdigit() and len(v[0]) < 10}
+            if "handle" in q:  # 首页左上角的 X 账号：/ui?handle=@xxx，空串不显示
+                cmd["handle"] = q["handle"][0][:24]
             ok = link.send({"t": "ui", **cmd})
             self._reply(200 if ok else 503, "ok" if ok else "串口未连接")
         elif path == "/replay":  # 调试：把最近 3 条网关请求当作新请求，再播放一遍飞行动画
