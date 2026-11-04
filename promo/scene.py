@@ -164,6 +164,12 @@ RIM_L = area('左轮廓', (-0.42, 0.32, 0.12), (0, 0, 0), 0.05, 4, (0.78, 0.86, 
 RIM_R = area('右轮廓', (0.42, 0.32, 0.12), (0, 0, 0), 0.05, 4, (1.0, 0.9, 0.82), size_y=0.7)
 FILL = area('补光', (-0.3, -0.55, 0.05), (0, 0, 0), 0.6, 0.6)
 LIGHTS = (KEY, RIM_L, RIM_R, FILL)
+# 灯架：运镜时灯光跟着相机的方位角一起转，等于机器放在转台上转——背后的轮廓光照在地上的光斑始终在画面同一处，不会扫过背景。
+# 以镜头中点为准（那一刻灯光和原来一样），各镜头的光感不变
+RIG = bpy.data.objects.new('灯架', None)
+sc.collection.objects.link(RIG)
+for L in LIGHTS:
+    L.parent = RIG
 
 # ---------------- 相机 ----------------
 cam_d = bpy.data.cameras.new('相机')
@@ -207,6 +213,8 @@ def camera_path(frames, f0, f1, a0, a1, focus0=(0, 0, 0), focus1=None, lens0=70,
         fc = Vector(focus0).lerp(Vector(focus1), t)
         cam.location = orbit(az, el, d, fc)
         cam.keyframe_insert('location', frame=f)
+        RIG.rotation_euler = (0, 0, math.radians(az - (a0[0] + a1[0]) / 2))
+        RIG.keyframe_insert('rotation_euler', frame=f)
         aim.location = fc
         aim.keyframe_insert('location', frame=f)
         cam_d.lens = lens0 + (lens1 - lens0) * t
@@ -292,8 +300,15 @@ def _():
     return 180
 
 
+def rim_soft():
+    """灯跟着相机转得多的镜头：侧着拍时轮廓灯会在前框、玻璃这些亮面上映出一整片白，看着像浅灰色外壳"""
+    for L in (RIM_L, RIM_R):
+        L.data.specular_factor = 0.25
+
+
 def opener(n, on):
     """开场：reveal + hero 合成一个连续运镜，从侧面亮起一路绕到 3/4 视角，中途不回头"""
+    rim_soft()
     lights_fade(1, 60)
     camera_path(None, 1, n, (-75, 4, 0.42), (30, 10, 0.48), C, C, 85, 75)
     screen_video('home_claude')
@@ -349,6 +364,7 @@ def _():
 @shot('turn')  # 360° 转台
 def _():
     camera_path(None, 1, 300, (-180, 12, 0.56), (180, 12, 0.56), C, C, 70)
+    rim_soft()
     screen_video('home_claude')
     screen_power([(1, SCREEN_ON)])
     return 300
