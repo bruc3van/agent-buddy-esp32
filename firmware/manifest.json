@@ -1,5 +1,5 @@
 {
-  "version": "v4.2",
+  "version": "v4.3",
   "chip": "esp32s3",
   "fqbn": "esp32:esp32:esp32s3:PSRAM=opi,FlashSize=4M,CDCOnBoot=cdc,USBMode=hwcdc,PartitionScheme=huge_app",
   "core": "esp32:esp32@3.3.12",
@@ -9,8 +9,8 @@
     "TAMC_GT911@1.0.2",
     "ArduinoJson@7.4.3"
   ],
-  "built": "2026-11-03T18:12:43+08:00",
-  "commit": "78de1e2",
+  "built": "2026-11-04T16:09:55+08:00",
+  "commit": "165cec4",
   "parts": [
     [
       "0x0",
