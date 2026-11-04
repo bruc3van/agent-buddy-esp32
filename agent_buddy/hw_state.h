@@ -16,6 +16,9 @@ bool spkMute = false;     // 静音（音量保留）
 int cfgDoneSec = 20;      // 「任务完成」播报门槛（秒），0 = 不播报
 bool cfgMicReact = true;  // Clawd 对声音做反应
 int cfgBright = 100;      // 屏幕亮度 10~100
+uint32_t qRefAt = 0;  // 点额度卡要求刷新的时刻（等 bridge 回 qref，最多 15 秒），0 = 没在刷新
+int qRefAg = -1;      // 刷新的是哪个 Agent 的额度：0 Claude / 1 Codex / 2 DeepSeek
+inline bool qRefreshing(int a) { return qRefAt && qRefAg == a && millis() - qRefAt < 15000; }
 int setScroll[6] = {0}, setContentH[6] = {0};  // 设置页各分区的滚动位置 / 内容高度（配对请求到来时 net_link.ino 要滚回顶部）
 int setSec = 0;           // 设置页当前分区：0 声音 / 1 Wi-Fi / 2 显示 / 3 雷达 / 4 关于 / 5 电脑
 bool clockPinned = false, clockDismissed = false;  // 待机时钟：手动打开 / 这次离开里手动关掉了（ui_scene.ino）

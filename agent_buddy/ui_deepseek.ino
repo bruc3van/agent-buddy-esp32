@@ -739,7 +739,7 @@ void dsStatusCard(uint32_t now) {
 void dsBalanceCard(int y) {
   const int x = DSP_X, w = DSP_W, gx = x + 12, gw = w - 24, gy = y + 31, gh = 15;
   pxPanel(x, y, w, 68, P_PANEL, P_EDGE, true);
-  pxText("账户余额", x + 12, y + 22, P_DIM, 1);
+  pxText(qRefreshing(2) ? "正在刷新" : "账户余额", x + 12, y + 22, P_DIM, 1);
   String big = dsBal.length() ? dsBal : String("—");
   pxText(big, x + w - 12 - pxW(big, 2), y + 26, !dsBal.length() ? P_DIM : (dsBalOk ? P_GREEN : P_RED), 2);
   if (dsTrendN >= 2) {
@@ -773,7 +773,7 @@ void dsBalanceCard(int y) {
 void dsTodayCard(int y) {
   const int x = DSP_X, w = DSP_W;
   pxPanel(x, y, w, 68, P_PANEL, P_EDGE, true);
-  pxText("今天", x + 12, y + 22, P_DIM, 1);
+  pxText(qRefreshing(2) ? "正在刷新" : "今天", x + 12, y + 22, P_DIM, 1);
   int done = doneTodayOf(2);
   String big = dsCalls >= 0 ? String(dsCalls) + " 次" : String(done) + " 个任务";
   pxText(big, x + w - 12 - pxW(big, 2), y + 26, P_TEXT, 2);

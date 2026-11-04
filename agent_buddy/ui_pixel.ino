@@ -561,8 +561,9 @@ void drawAgentPanel(int a, uint32_t now) {
   // 额度卡
   String suf = cxAcctN > 1 ? (cxAcctAuto ? String(" · 自动") : String(" · 手选")) : String("");
   String acct = a && cxAcct.length() ? maskAcct(cxAcct) + suf : String("");
-  quotaCard(QC_Y1, "5 小时额度剩余", a ? cxH5Used : h5Used, a ? cxH5Reset : h5Reset, acct);
-  quotaCard(QC_Y2, "7 天额度剩余", a ? cxD7Used : d7Used, a ? cxD7Reset : d7Reset);
+  bool rf = qRefreshing(a);  // 点了额度卡、在等 magpie 重新读：标题换成「正在刷新」
+  quotaCard(QC_Y1, rf ? "正在刷新" : "5 小时额度剩余", a ? cxH5Used : h5Used, a ? cxH5Reset : h5Reset, acct);
+  quotaCard(QC_Y2, rf ? "正在刷新" : "7 天额度剩余", a ? cxD7Used : d7Used, a ? cxD7Reset : d7Reset);
 }
 
 void drawPanelPx(uint32_t now) { drawAgentPanel(0, now); }

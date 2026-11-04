@@ -168,6 +168,20 @@ def truncate(text, width=DETAIL_WIDTH):
     return out
 
 
+# Codex 向你提问的工具：异步版问完马上返回、接着干活，你的回答之后作为一条 UserPromptSubmit 送回来
+ASK_TOOLS = ("request_user_input", "request_user_input_async")
+
+
+def ask_text(tin):
+    """提问工具参数里的第一个问题。"""
+    if not isinstance(tin, dict):
+        return ""
+    qs = tin.get("questions")
+    if isinstance(qs, list) and qs and isinstance(qs[0], dict):
+        return str(qs[0].get("question") or qs[0].get("header") or "")
+    return str(tin.get("question") or tin.get("prompt") or tin.get("message") or "")
+
+
 def tool_label(tool, tin):
     """根据工具名和参数生成 (状态文字, 细节)。"""
     tin = tin if isinstance(tin, dict) else {}  # hook 载荷形状不对时当成没有参数，不让整条事件丢掉
@@ -455,6 +469,8 @@ def handle_hook(ev, agent="claude"):
     cwd = ev.get("cwd") or ""
     proj = os.path.basename(cwd.rstrip("/\\")) if cwd else (prev or {}).get("proj", "")  # 项目名：工作目录的最后一级
     t0 = (prev or {}).get("t0", 0)  # 这一轮从什么时候开始（用户发出提问）
+    # 还没回答的提问 (问题, 时刻)：异步提问之后会话还会继续发事件，不能让后面的「干活中」把「等你回复」盖掉
+    ask = (prev or {}).get("ask")
 
     if name == "SessionStart":
         if ev.get("source") == "compact" and busy:
@@ -462,9 +478,15 @@ def handle_hook(ev, agent="claude"):
         rec = ("idle", "待命中", "新会话已开始", "")
         busy = False
     elif name == "UserPromptSubmit":
+        ask = None  # 新消息（包括对提问的回答）：提问结束
         rec = ("thinking", "思考中", ev.get("prompt", ""), "")
         if not busy:
             t0 = now
+        busy = True
+    elif name == "PreToolUse" and tool in ASK_TOOLS:
+        q = ask_text(ev.get("tool_input"))
+        ask = (truncate(redact(q)), now)
+        rec = ("waiting", "等你回复", q or "有问题要问你", tool)
         busy = True
     elif name == "PreToolUse":
         label, detail = tool_label(tool, ev.get("tool_input"))
@@ -473,6 +495,8 @@ def handle_hook(ev, agent="claude"):
         rec = ("working", label, detail, tool)
         busy = True
     elif name in ("PostToolUse", "PostToolBatch", "PostCompact", "SubagentStop"):
+        if name == "PostToolUse" and tool == "request_user_input":  # 同步提问返回 = 已经回答了；异步的要等回答那条消息
+            ask = None
         rec = ("thinking", "思考中", "", "") if busy else ("idle", "待命中", "", "")
     elif name == "PostToolUseFailure":
         rec = ("thinking", "思考中", f"{tool} 失败，想想办法", "")
@@ -511,12 +535,15 @@ def handle_hook(ev, agent="claude"):
     except Exception as e:  # noqa: BLE001
         log("announce failed:", repr(e)[:120])
     if rec is None:
+        with lock:
+            if sid in sessions:
+                sessions[sid]["ask"] = ask
         return
     state, label, detail, tool = rec
     detail = truncate(redact(detail))
     with lock:
         sessions[sid] = {"state": state, "label": label, "detail": detail, "tool": tool, "ts": now, "agent": agent, "busy": busy,
-                         "proj": fit(proj, 24), "t0": t0 if busy else 0}
+                         "proj": fit(proj, 24), "t0": t0 if busy else 0, "ask": ask}
         last_event_ts[agent] = now
         if state == "done":
             done_n[agent] = done_n.get(agent, 0) + 1
@@ -525,8 +552,16 @@ def handle_hook(ev, agent="claude"):
     log(f"{name:<18} {agent[:2]} {sid[:8]} -> {state} {label} {detail}")
 
 
+def asking(s, now):
+    """会话里还没回答的提问（问题文字）；没有返回 None。"""
+    a = s.get("ask")
+    return a[0] if a and now - a[1] <= STALE_WAITING else None
+
+
 def effective(s, now):
     """考虑时间衰减后的会话状态。"""
+    if asking(s, now) is not None:
+        return "waiting"
     age = now - s["ts"]
     st = s["state"]
     if st == "done" and age > DONE_HOLD:
@@ -576,6 +611,9 @@ def aggregate(agent="claude"):
         label = best["label"] if best and best["state"] == "idle" else "待命中"
         detail = best["detail"] if best and best["state"] == "idle" else "随时可以开始"
         return {"state": "idle", "label": label, "detail": detail, "tool": "", "sessions": active, **extra}
+    q = asking(best, now)
+    if q is not None and best["state"] != "waiting":  # 提问之后会话还在干活：显示问题，不显示后面的命令
+        return {"state": "waiting", "label": "等你回复", "detail": q or "有问题要问你", "tool": "", "sessions": active, **extra}
     return {"state": best_state, "label": best["label"], "detail": best["detail"], "tool": best["tool"], "sessions": active,
             **extra}
 
@@ -1233,7 +1271,9 @@ def deepseek_key():
 def deepseek_loop():
     while True:
         key = deepseek_key()
-        if key and time.time() - ds_magpie_at > 600:
+        forced = ds_wake.is_set()
+        ds_wake.clear()
+        if key and (forced or time.time() - ds_magpie_at > 600):
             try:
                 req = urllib.request.Request("https://api.deepseek.com/user/balance",
                                              headers={"Authorization": f"Bearer {key}", "Accept": "application/json"})
@@ -1248,7 +1288,7 @@ def deepseek_loop():
                         ds_balance.update(bal=f"{sym}{float(b.get('total_balance') or 0):.2f}", ok=int(bool(d.get("is_available"))))
             except Exception as e:  # noqa: BLE001 —— 查不到就沿用上次的数
                 log("deepseek balance failed:", repr(e)[:120])
-        time.sleep(300)
+        ds_wake.wait(300)
 
 
 # ---------------- magpie ----------------
@@ -1270,6 +1310,23 @@ def magpie_bin():
 PERIODS = ["today", "7d", "30d", "all"]
 MONTHS = {m: i + 1 for i, m in enumerate("Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split())}
 magpie_resend = threading.Event()  # 设备重新连上时置位：下一轮全量重发
+quota_now = threading.Event()      # 板子上点了额度卡：magpie 已经重新读过订阅，下一秒就重读额度并回 qref
+ds_wake = threading.Event()        # 同上，没有 magpie、靠 API Key 查 DeepSeek 余额时立刻查一次
+QREF_PROVIDER = {"claude": "claude", "codex": "codex", "deepseek": "deepseek"}
+
+
+def quota_refresh(agent):
+    """点额度卡：让 magpie 立刻重新读这个 provider 的订阅额度（平时它自己隔几分钟才读一次），读完马上推给板子。"""
+    try:
+        req = urllib.request.Request(MAGPIE_API + "quotas/refresh?provider=" + QREF_PROVIDER.get(agent, ""), data=b"",
+                                     method="POST")
+        urllib.request.urlopen(req, timeout=30).read()
+        log("额度已刷新：", agent or "全部")
+    except Exception as e:  # noqa: BLE001 —— magpie 没开：照样回 qref，板子别一直显示「刷新中」
+        log("额度刷新失败：", repr(e)[:120])
+    if agent == "deepseek":
+        ds_wake.set()
+    quota_now.set()
 
 
 def mget(path, raw=False):
@@ -1716,11 +1773,16 @@ def magpie_loop(link):
     tasks = [("routes", 3), ("usage0", 10), ("quotas", 30), ("dstoday", 30), ("usage", 60), ("agents", 60)]
     last_full = time.time()
     online = True  # 以最近一次实际探测（routes）为准；没轮到探测的那一秒沿用上次结果
+    ack = False  # 这一轮要回板子 qref（点额度卡之后）
     while True:
         if magpie_resend.is_set():
             magpie_resend.clear()
             sent.clear()
             due.clear()
+        if quota_now.is_set():
+            quota_now.clear()
+            due.pop("quotas", None)
+            ack = True
         now = time.time()
         if now - last_full > 120:  # 隔一阵子即使没变也重发一次，防串口丢行
             sent.clear()
@@ -1757,6 +1819,10 @@ def magpie_loop(link):
                     sent[key] = body
         if sent.get("mst") != str(online) and link.send({"t": "mst", "on": online}):
             sent["mst"] = str(online)
+        if ack:
+            ack = False
+            time.sleep(0.3)  # 等 pump 把新额度（usage / cusage / dsusage）发出去，板子收到 qref 时数字已经是新的
+            link.send({"t": "qref"})
         time.sleep(1)
 
 
@@ -1773,7 +1839,7 @@ rec = Recorder()
 
 
 def device_line(line, src="usb"):
-    """设备的一行文字输出：设置同步（CFG）、雷达（PRES）、换 Codex 账号（CXACC）、Wi-Fi 配对（HELLO / PAIRED）、
+    """设备的一行文字输出：设置同步（CFG）、雷达（PRES）、换 Codex 账号（CXACC）、刷新额度（QREF agent）、Wi-Fi 配对（HELLO / PAIRED）、
     性能 / 扫描 / 调试日志；其余丢弃。src：从 USB 还是 Wi-Fi 收到的（配对只认 USB）。"""
     global codex_pick
     if line.startswith(b"HELLO ") and src == "usb":
@@ -1792,6 +1858,9 @@ def device_line(line, src="usb"):
                 pending_pair.clear()
         except (ValueError, OSError):
             pass
+    elif line.startswith(b"QREF"):
+        agent = line[4:].decode(errors="replace").strip()
+        threading.Thread(target=quota_refresh, args=(agent,), daemon=True).start()
     elif line.startswith(b"CXACC"):
         with lock:
             ids = [c[0] for c in codex_cards]
