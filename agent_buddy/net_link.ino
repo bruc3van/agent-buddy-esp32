@@ -721,10 +721,14 @@ void netInit() {
 // 主循环里取出网络来的行，交给同一个 handleLine（界面状态仍然只在主循环里改）
 void pollNet() {
   if (!netRx) return;
-  if (pairSas >= 0 && !(screen == SCR_SET && setSec == 1)) {  // 有电脑请求配对：跳到「连接」页给用户确认（配对请求在最上面）
+  static int lastSas = -1;
+  int sas = pairSas;
+  if (sas >= 0 && !(screen == SCR_SET && setSec == 1)) {  // 有电脑请求配对：跳到「连接」页给用户确认（配对请求在最上面）
     setSec = 1;
     setScreen(SCR_SET);
   }
+  if (sas >= 0 && sas != lastSas) setScroll[1] = 0;  // 新请求：滚回顶部，已经在「连接」页往下翻着看 Wi-Fi 时也看得到验证码和允许按钮
+  lastSas = sas;
   size_t n;
   int k = 0;
   while (k++ < 32 && (n = xMessageBufferReceive(netRx, netLineBuf, NET_MAX, 0)) > 0) {

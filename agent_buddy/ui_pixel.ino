@@ -271,6 +271,23 @@ String maskAcct(const String &s) {
   return s.substring(0, at > 3 ? 3 : 1) + "***" + s.substring(at);
 }
 
+// 一行文字里所有邮箱都按 maskAcct 打码（路由页「Provider · 账号 · 模型」这类拼起来的串）
+String maskAcctIn(const String &s) {
+  if (cfgShowAcct || s.indexOf('@') < 0) return s;
+  String out;
+  int from = 0;
+  for (int at = s.indexOf('@'); at >= 0; at = s.indexOf('@', at + 1)) {
+    int st = at;
+    while (st > from && s[st - 1] != ' ' && s[st - 1] != '(' && s[st - 1] != ',') st--;
+    out += s.substring(from, st);
+    String user = s.substring(st, at);
+    if (user.length() && user.indexOf('*') < 0) user = user.substring(0, user.length() > 3 ? 3 : 1) + "***";
+    out += user;
+    from = at;
+  }
+  return out + s.substring(from);
+}
+
 // 按优先级拼一行：parts 从前往后越来越不重要，放不下就整段丢掉后面的，不截半个字
 String fitParts(const String *parts, int n, int maxW) {
   String out;
@@ -728,7 +745,8 @@ void drawStagePx(uint32_t now) {
   for (int i = 0; i < nD; i++) {
     const MsNode &N = msDst[i];
     int x = dsX0[i];
-    int nw = pxUW(N.name), sw = N.sub.length() ? pxW(N.sub, 1) + 6 : 0;
+    String sub = maskAcctIn(N.sub);
+    int nw = pxUW(N.name), sw = sub.length() ? pxW(sub, 1) + 6 : 0;
     int w = min(22 + nw + sw + 8, (cp ? 444 : 466) - x);  // 收起时给右侧的 ▾ 留位置
     pxPanel(x, dsY[i] - 11, w, 22, P_BG, P_EDGE, false);
     uint16_t dc = N.st == 2 ? P_RED : P_GREEN;
@@ -741,7 +759,7 @@ void drawStagePx(uint32_t now) {
       else { sw = 0; nr = room; }
     }
     pxUMarquee(N.name, x + 20, dsY[i] + 6, P_TEXT, nr);
-    if (sw) pxText(N.sub, x + 24 + min(nw, nr), dsY[i] + 5, P_DIM, 1);
+    if (sw) pxText(sub, x + 24 + min(nw, nr), dsY[i] + 5, P_DIM, 1);
   }
 
   // 中枢：浅色方块 + 黑色像素喜鹊；忙时方形框往外扩
@@ -794,7 +812,7 @@ void drawRouteRowsPx(int y) {
     }
     pxText(R.tm, 464 - pxW(R.tm, 1), ry + 20, P_DIM, 1);
     pxText("→", 20, ry + 41, R.err ? P_RED : P_EDGE, 1);
-    pxText(R.served, 36, ry + 41, R.err ? P_RED : P_DIM, 1);
+    pxText(maskAcctIn(R.served), 36, ry + 41, R.err ? P_RED : P_DIM, 1);
     pxText(R.info, 464 - pxW(R.info, 1), ry + 41, P_DIM, 1);
   }
 }

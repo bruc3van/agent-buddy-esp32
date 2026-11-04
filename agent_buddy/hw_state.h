@@ -16,9 +16,10 @@ bool spkMute = false;     // 静音（音量保留）
 int cfgDoneSec = 20;      // 「任务完成」播报门槛（秒），0 = 不播报
 bool cfgMicReact = true;  // Clawd 对声音做反应
 int cfgBright = 100;      // 屏幕亮度 10~100
+int setScroll[6] = {0}, setContentH[6] = {0};  // 设置页各分区的滚动位置 / 内容高度（配对请求到来时 net_link.ino 要滚回顶部）
 int setSec = 0;           // 设置页当前分区：0 声音 / 1 Wi-Fi / 2 显示 / 3 雷达 / 4 关于 / 5 电脑
 bool clockPinned = false, clockDismissed = false;  // 待机时钟：手动打开 / 这次离开里手动关掉了（ui_scene.ino）
-int txtClipL = 0, txtClipR = 480, txtClipT = 0, txtClipB = 272;  // 文字缓存绘制的裁剪范围（跑马灯、翻页钟用，ui_textcache.ino）
+int txtClipL = 0, txtClipR = 480, txtClipT = 0, txtClipB = 32767;  // 文字缓存绘制的裁剪范围（跑马灯、翻页钟用，ui_textcache.ino）；默认下边界不限，由当前画布高度兜底（路由列表缓存图高于 272）
 int homeDateX = 0;        // 首页状态栏日期时钟的起点 x，0 表示还没画过
 int homeIconX = 0;        // 首页状态栏齿轮按钮的 x，0 表示还没画过
 int homeAlertX[4], homeAlertW[4], homeAlertSec[4], homeAlertN = 0;  // 状态栏异常提示（电量 / Wi-Fi / 麦克风 / 有人靠近）的位置，点了去设置的哪个分区（-1 = 雷达页）
@@ -133,6 +134,7 @@ long calibSumX = 0, calibSumY = 0;
 int calibN = 0;
 String calibMsg = "";
 bool cfgNightDim = true;   // 夜里（23:00～7:00）自动调暗（存 NVS）
+struct DoneSrc { uint32_t bi, use; long seq[3]; };  // 完成次数的一个来源（bridge 进程），见 ui_toast.ino
 int doneToday[3] = {0, 0, 0}; // 今天完成的任务数：Claude / Codex / DeepSeek（待机时钟显示）
 int doneDay = -1;          // 计数对应的日期（本地日序号）
 // 三个 Agent 的补充信息（bridge 的 state / cx / ds 消息里带）：在哪个项目、最近一次完成

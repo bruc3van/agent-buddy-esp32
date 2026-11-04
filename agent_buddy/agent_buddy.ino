@@ -176,7 +176,7 @@ void handleLine(const String &line) {
     statusDetail = String(doc["detail"] | "");
     tool = String(doc["tool"] | "");
     sessions = doc["sessions"] | 0;
-    doneSeqSet(0, doc["dn"] | -1L);
+    doneSeqSet(0, doc["dn"] | -1L, doc["bi"] | (uint32_t)0);
     agExtraFrom(0, doc.as<JsonVariantConst>());
   } else if (!strcmp(t, "cx")) {  // Codex 的状态
     Mode m = parseMode(doc["state"] | "idle");
@@ -188,7 +188,7 @@ void handleLine(const String &line) {
     cxLabel = String(doc["label"] | "");
     cxDetail = String(doc["detail"] | "");
     cxSessions = doc["sessions"] | 0;
-    doneSeqSet(1, doc["dn"] | -1L);
+    doneSeqSet(1, doc["dn"] | -1L, doc["bi"] | (uint32_t)0);
     agExtraFrom(1, doc.as<JsonVariantConst>());
   } else if (!strcmp(t, "ds")) {  // DeepSeek Harness 的状态
     Mode m = parseMode(doc["state"] | "idle");
@@ -201,7 +201,7 @@ void handleLine(const String &line) {
     dsDetail = String(doc["detail"] | "");
     dsTool = String(doc["tool"] | "");
     dsSessions = doc["sessions"] | 0;
-    doneSeqSet(2, doc["dn"] | -1L);
+    doneSeqSet(2, doc["dn"] | -1L, doc["bi"] | (uint32_t)0);
     agExtraFrom(2, doc.as<JsonVariantConst>());
   } else if (!strcmp(t, "dsusage")) {  // DeepSeek 账户余额（magpie 或 API Key）
     dsBal = String(doc["bal"] | "");

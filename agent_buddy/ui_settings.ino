@@ -20,7 +20,6 @@ enum {
 struct SetHit { int16_t x, y, w, h; uint8_t id; };
 SetHit setHits[48];
 int setHitN = 0;
-int setScroll[6] = {0}, setContentH[6] = {0};
 int setSlider = 0;  // 正在拖的滑块 id
 uint32_t cfgSentAt = 0;
 bool cfgDirty = true;
@@ -684,6 +683,7 @@ void settingsTap(int x, int y) {
     settingsSave();
   } else if (id == H_ACCT) {
     cfgShowAcct = !cfgShowAcct;
+    mrListDirty = true;  // 路由列表是缓存图，账号打不打码要重画
     settingsSave();
   }
 }

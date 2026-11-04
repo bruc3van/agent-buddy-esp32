@@ -546,17 +546,21 @@ def aggregate(agent="claude"):
         gone = [k for k, v in sessions.items() if now - v["ts"] > SESSION_TTL]
         for sid in gone:
             sessions.pop(sid)
-        mine = [s for s in sessions.values() if s.get("agent", "claude") == agent]
+        mine = {sid: s for sid, s in sessions.items() if s.get("agent", "claude") == agent}
+        # dsh 派出去的子任务也有自己的 session_id（主会话是 session-xxx，子任务是裸 uuid），做完不发 Stop，
+        # 留下的 thinking 会一直压过主会话的 done。子任务只在主会话之后还有新事件时（正在跑）才参与选状态
+        subs = {sid for sid in mine if agent == "deepseek" and not sid.startswith("session-")}
+        main_ts = max((s["ts"] for sid, s in mine.items() if sid not in subs), default=0)
         best, best_state = None, "idle"
-        for s in mine:
+        for sid, s in mine.items():
+            if sid in subs and s["ts"] <= main_ts:
+                continue
             st = effective(s, now)
             if best is None or (PRIORITY[st], s["ts"]) > (PRIORITY[best_state], best["ts"]):
                 best, best_state = s, st
-        # 会话数只数正在一轮对话里的（思考、干活、等你确认）：开了没用的空会话、/clear 前留下的不算；
-        # dsh 派出去的子任务也有自己的 session_id（主会话是 session-xxx，子任务是裸 uuid），做完不发 Stop，不算
-        active = sum(1 for sid, s in sessions.items() if s.get("agent", "claude") == agent
-                     and effective(s, now) in ("thinking", "working", "waiting", "compacting")
-                     and not (agent == "deepseek" and not sid.startswith("session-")))
+        # 会话数只数正在一轮对话里的（思考、干活、等你确认）：开了没用的空会话、/clear 前留下的不算；子任务不算
+        active = sum(1 for sid, s in mine.items() if sid not in subs
+                     and effective(s, now) in ("thinking", "working", "waiting", "compacting"))
         idle_for = now - last_event_ts[agent]
         dn = done_n.get(agent, 0)
         ld = last_done.get(agent)
@@ -694,9 +698,15 @@ class Link:
                 return False
 
 
+# 这个 bridge 进程的随机编号：板子按它区分完成次数（"dn"）来自哪台电脑、哪次启动，切换电脑时不会把别家的计数当成新完成
+BRIDGE_INST = secrets.randbits(31) | 1
+
+
 def encode_line(obj):
     obj = {**obj, "now": int(time.time()),
            "tz": time.localtime().tm_gmtoff}  # 本地时区偏移（秒），屏幕首页的时钟用
+    if "dn" in obj:
+        obj["bi"] = BRIDGE_INST
     try:  # NaN / inf 会生成固件解析不了的 JSON
         return (json.dumps(obj, ensure_ascii=False, allow_nan=False) + "\n").encode()
     except (TypeError, ValueError) as e:
@@ -1288,6 +1298,28 @@ def fit(text, width):
     return out + "…"
 
 
+def fit_acct(text, width):
+    """同 fit，但不把邮箱截在 @ 前面：屏幕按 @ 找邮箱打码，只剩前半截时认不出来，会把账号前缀原样显示。
+    截在邮箱的用户名里时，缩短用户名、保留 @域名；连域名都放不下就整段丢掉这个邮箱。"""
+    text = " ".join(str(text or "").split())
+    out = fit(text, width)
+    if out == text:
+        return out
+    body = out[:-1]
+    if not body or body.endswith(" "):
+        return out
+    head, sep, last = body.rpartition(" ")
+    tok = text.split()[len(body.split()) - 1]
+    if "@" not in tok or "@" in last:
+        return out
+    user, _, dom = tok.partition("@")
+    room = width - cells(head + sep) - cells("@" + dom) - 1  # 1 = 用户名后面的 …
+    if room >= 1 and user:
+        return head + sep + fit(user, room + 2)[:-1] + "…@" + dom
+    head = head.rstrip(" ·")
+    return fit(head, width - 1) + ("" if fit(head, width - 1).endswith("…") else "…") if head else ""
+
+
 def short_num(n, lower=False):
     """与 magpie app.js 的 fmtN 一致；lower=True 时 K 写成 k（路由列表的 token 数）。"""
     n = n or 0
@@ -1536,7 +1568,7 @@ def build_routes(_today_tokens=None):
         meta = " · ".join(x for x in (f"{short_num(toks, lower=True)} token" if toks else "", took(r.get("ms"))) if x)
         rows.append({"a": agent, "i": r.get("icon") or "", "m": fit(r.get("req") or r.get("model"), room), "k": kind,
                      "tm": local(r["t"]).strftime("%H:%M:%S"),
-                     "sv": fit(f"{status} {r.get('error') or '失败'}" if bad else where + (f" · {served}" if served else ""), 40),
+                     "sv": fit_acct(f"{status} {r.get('error') or '失败'}" if bad else where + (f" · {served}" if served else ""), 40),
                      "info": meta, "err": bad})
 
     # 连线图：左边最近的 3 个 Agent，右边最近的 3 个服务方（provider + 账号）
@@ -1548,7 +1580,7 @@ def build_routes(_today_tokens=None):
         key = r.get("provider") or "?"
         if key not in [x["id"] for x in dst] and len(dst) < 3:
             bad = (r.get("status") or 0) >= 400 or bool(r.get("error"))
-            dst.append({"id": key, "n": fit(r.get("providerName") or key, 32), "s": fit(r.get("providerAccount") or "", 24),
+            dst.append({"id": key, "n": fit(r.get("providerName") or key, 32), "s": fit_acct(r.get("providerAccount") or "", 24),
                         "st": 2 if bad else 1})
 
     # 新完成的请求：交给屏幕按 magpie 的方式播放（光点 Agent → magpie → 服务方 → 等回答 → 原路返回）

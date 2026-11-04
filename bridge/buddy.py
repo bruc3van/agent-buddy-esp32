@@ -684,6 +684,26 @@ def _toml_tables(text):
     return chunks
 
 
+def _chunk_cmds(body, ev):
+    """一段 [[hooks.X.hooks]] 里解析出来的 command 列表；解析不了返回空列表（当成旧命令删掉）。"""
+    try:
+        node = tomllib.loads(body).get("hooks", {}).get(ev, {})
+    except tomllib.TOMLDecodeError:
+        return []
+    hs = node.get("hooks", []) if isinstance(node, dict) else []
+    return [h.get("command") for h in hs if isinstance(h, dict)]
+
+
+def _codex_have(text, ours):
+    """config.toml 里已经装了我们当前命令的 Codex 事件。"""
+    try:
+        cfg = tomllib.loads(text)
+    except tomllib.TOMLDecodeError:
+        return set()
+    return {ev for ev, groups in (cfg.get("hooks") or {}).items() if isinstance(groups, list)
+            for g in groups if isinstance(g, dict) for h in g.get("hooks", []) if isinstance(h, dict) and h.get("command") == ours}
+
+
 def codex_hooks(on):
     """~/.codex/config.toml：在末尾追加 / 移除每个事件一段 [[hooks.X]]（async）。没装 Codex 就跳过。"""
     if not os.path.isdir(CODEX_DIR) and not shutil.which("codex"):
@@ -700,8 +720,7 @@ def codex_hooks(on):
         bad(f"{CODEX_CONFIG} 解析失败，没有改动：{e}")
         return False
     ours = hook_cmd("codex")
-    have = {ev for ev, groups in (cfg.get("hooks") or {}).items() if isinstance(groups, list)
-            for g in groups for h in g.get("hooks", []) if h.get("command") == ours}
+    have = _codex_have(text, ours)
     stale = any(OUR_HOOK.search(str(h.get("command", ""))) and h.get("command") != ours
                 for groups in (cfg.get("hooks") or {}).values() if isinstance(groups, list)
                 for g in groups for h in g.get("hooks", []))
@@ -713,7 +732,8 @@ def codex_hooks(on):
         chunks, keep = _toml_tables(text), []
         for head, body in chunks:
             m = re.fullmatch(r"\[\[hooks\.(\w+)\.hooks\]\]", head or "")
-            if m and OUR_HOOK.search(body) and (on is False or ours not in body):
+            # 按解析出来的命令比：路径带空格时命令里有引号，TOML 文本里是转义过的 \"，直接搜原文会把当前命令误判成旧的
+            if m and OUR_HOOK.search(body) and (on is False or ours not in _chunk_cmds(body, m.group(1))):
                 if keep and keep[-1][0] == f"[[hooks.{m.group(1)}]]" and not keep[-1][1].strip().splitlines()[1:]:
                     keep.pop()
                 continue
@@ -721,7 +741,7 @@ def codex_hooks(on):
         new = "".join(body for _, body in keep)
         if not OUR_HOOK.search(new):
             new = re.sub(r"\n?# ---- (?:Agent|Claude) Buddy（ESP32 桌面屏）[^\n]*\n", "\n", new)
-        have = set() if not on else have
+        have = set() if not on else _codex_have(new, ours)  # 清理之后重新数，被删掉的事件要补回来
     if on:
         block = ["\n# ---- Agent Buddy（ESP32 桌面屏）：把 Codex 事件转发给本机 bridge，bridge 不在时静默忽略 ----\n"]
         for ev in CODEX_EVENTS:

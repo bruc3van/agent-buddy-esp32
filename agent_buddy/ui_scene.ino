@@ -668,7 +668,7 @@ void flipHalf(int k, const String &s, int clipT, int clipB) {
   txtClipB = clipB;
   pxText(s, x + FC_W / 2 - pxW(s, 10) / 2, mid + 40, P_TEXT, 10);
   txtClipT = 0;
-  txtClipB = 272;
+  txtClipB = 32767;
 }
 
 // 一张翻页卡。换数字时照真的翻页钟翻一下（共 300ms）：

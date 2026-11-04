@@ -25,13 +25,35 @@ void doneAdd(int a, int k) {
   prefs.putInt(("dn" + String(a)).c_str(), doneToday[a]);
 }
 
-// 按 bridge 的完成次数记「今天完成」：并发完成、连续完成都不漏。开机后第一次收到只当起点，不会重复计数
-void doneSeqSet(int a, long n) {
+// 完成次数的起点按来源分开记：bi = bridge 进程的随机编号（每台电脑、每次启动都不同；旧 bridge 不发，记成 0）。
+// 切到另一台电脑再切回来时，各自和自己上一次的值比，不会把 A、B 两边的计数差当成新完成（DoneSrc 在 hw_state.h）
+const int DONE_SRC_N = 6;
+DoneSrc doneSrc[DONE_SRC_N];
+int doneSrcN = 0;
+uint32_t doneSrcUse = 0;
+
+DoneSrc *doneSrcOf(uint32_t bi) {
+  for (int i = 0; i < doneSrcN; i++)
+    if (doneSrc[i].bi == bi) { doneSrc[i].use = ++doneSrcUse; return &doneSrc[i]; }
+  int k = doneSrcN < DONE_SRC_N ? doneSrcN++ : 0;
+  if (k == 0 && doneSrcN == DONE_SRC_N)  // 满了：换掉最久没用的
+    for (int i = 1; i < DONE_SRC_N; i++)
+      if (doneSrc[i].use < doneSrc[k].use) k = i;
+  doneSrc[k].bi = bi;
+  doneSrc[k].use = ++doneSrcUse;
+  for (int a = 0; a < AG_N; a++) doneSrc[k].seq[a] = -1;
+  return &doneSrc[k];
+}
+
+// 按 bridge 的完成次数记「今天完成」：并发完成、连续完成都不漏。每个来源第一次收到只当起点，不会重复计数
+void doneSeqSet(int a, long n, uint32_t bi) {
   if (n < 0) return;
-  if (doneSeq[a] >= 0) {
-    long k = n >= doneSeq[a] ? n - doneSeq[a] : n;  // 变小：bridge 重启过，从 0 重新数
+  DoneSrc *s = doneSrcOf(bi);
+  if (s->seq[a] >= 0) {
+    long k = n >= s->seq[a] ? n - s->seq[a] : n;  // 变小：bridge 重启过，从 0 重新数（只有不发 bi 的旧 bridge 会走到）
     if (k > 0) doneAdd(a, min(k, 100L));
   }
+  s->seq[a] = n;
   doneSeq[a] = n;
 }
 int16_t toastX = 0, toastW = 0;
