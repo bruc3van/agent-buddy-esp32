@@ -334,31 +334,170 @@ void dsTankFrame(int x, int y, int w, int h) {
   gfx->fillRect(x + w, top, 6, 2, P_EDGE);
 }
 
-// 浮在水面的大气泡（代替头顶的对话气泡，鲸鱼在水里不会说话）。
-// 立体感：几层往左上偏的同心椭圆，外圈深、越往里越亮；水面以下换一套更蓝更暗的颜色，像泡在水里。
-// 再加左上一块高光、右下一道反光。rx / ry 不同时是被压扁的样子（落回水面那一下）
+// ---------- 浮在水面的玻璃泡（代替头顶的对话气泡，鲸鱼在水里不会说话）----------
+// 深色半透明的芯（水下那截换亮一点的蓝）+ 2px 泡壁（光从左上来：白 → 浅青 → 暗蓝）+ 内侧一圈微光 + 左上月牙高光。
+// 里面的图标只用 DeepSeek 的几种蓝，线宽统一 2px。rx / ry 不同时是被压扁的样子（落回水面那一下）
+#define DB_WHITE 0xF7DF  // #F2FAFF
+#define DB_CYAN  0x8E9E  // #8FD3F7
+#define DB_BLUE  0x4B5F  // DeepSeek 蓝 #4D6BFE
+#define DB_BLUED 0x3A3B  // 背光面的 DeepSeek 蓝
+#define DB_NAVY  0x08A6  // #0E1630 图标里的深色底
+#define DB_RIMLO 0x3BFA  // #3A7FD0 背光那侧的泡壁
+#define DB_AIR   0x1928  // 泡里（水面以上）#1A2747
+#define DB_SUB   0x22D7  // 泡里（水下）#2559B8
+
 void dsAirBubble(int cx, int cy, int rx, int ry, int wy) {
-  static const uint16_t AIR[4] = {0x5D5C, 0xAEDE, 0xDF7F, 0xF7DF};  // #5FA8E0 → #F2FAFF
-  static const uint16_t SUB[4] = {0x3C9A, 0x75DD, 0x9E7E, 0xBEFE};  // 水下：#3A92D2 → #B8DCF6
-  static const float SC[4] = {1.0f, 0.9f, 0.74f, 0.52f}, OFF[4] = {0, 0.06f, 0.14f, 0.22f};
+  const float rm = min(rx, ry), ri = 1 - 2.2f / rm, rg = 1 - 3.4f / rm;
+  const uint16_t gAir = mix565(DB_AIR, DB_CYAN, 70), gSub = mix565(DB_SUB, DB_CYAN, 70);
+  // 每行：先用横线铺微光圈和芯（同心椭圆，一行里各是一整段），只有泡壁逐个像素按光照上色
+  auto span = [&](float k, float ny) { float v = k - ny * ny; return v < 0 ? -1 : (int)floorf(rx * sqrtf(v)); };
   for (int yy = cy - ry; yy <= cy + ry; yy++) {
-    const uint16_t *pal = yy > wy ? SUB : AIR;
-    for (int i = 0; i < 4; i++) {
-      float lrx = rx * SC[i], lry = ry * SC[i], lcx = cx - rx * OFF[i], lcy = cy - ry * OFF[i];
-      float d = (yy - lcy) / lry;
-      if (d < -1 || d > 1) continue;
-      int half = (int)(lrx * sqrtf(1 - d * d));
-      gfx->drawFastHLine((int)lcx - half, yy, half * 2 + 1, pal[i]);
+    bool sub = yy > wy;
+    float ny = (yy - cy) / (float)ry;
+    int ho = span(1.0f, ny), hr = span(ri * ri, ny), hg = span(rg * rg, ny);
+    if (ho < 0) continue;
+    if (hr >= 0) gfx->drawFastHLine(cx - hr, yy, 2 * hr + 1, sub ? gSub : gAir);
+    if (hg >= 0) gfx->drawFastHLine(cx - hg, yy, 2 * hg + 1, sub ? DB_SUB : DB_AIR);
+    for (int xx = cx - ho; xx <= cx + ho; xx++) {
+      if (abs(xx - cx) <= hr) { xx = cx + hr; continue; }  // 跳过已经铺好的中段
+      float nx = (xx - cx) / (float)rx, d = nx * nx + ny * ny;
+      float lit = -(nx + ny) * 0.7071f / sqrtf(d);  // 泡壁：按朝向光源的程度分三档
+      gfx->drawPixel(xx, yy, lit < -0.55f ? (sub ? DB_CYAN : DB_WHITE) : (lit < 0.35f ? DB_CYAN : DB_RIMLO));
     }
   }
-  int hx = cx - rx * 11 / 20, hy = cy - ry * 11 / 20;  // 高光：台阶状一块
-  gfx->fillRect(hx + 2, hy - 3, 9, 3, 0xFFFF);
-  gfx->fillRect(hx - 2, hy, 7, 4, 0xFFFF);
-  gfx->fillRect(hx - 4, hy + 4, 3, 7, 0xFFFF);
-  for (int a = 20; a <= 70; a += 5) {  // 右下的反光：贴着边缘的一小段弧
+  for (int a = 196; a < 246; a += 3) {  // 月牙高光
     float t = a * PI / 180;
-    gfx->fillRect(cx + (int)((rx - 4) * cosf(t)), cy + (int)((ry - 4) * sinf(t)), 2, 2, 0xDF7F);
+    gfx->fillRect(cx + (int)lroundf((rx - 7) * cosf(t)), cy + (int)lroundf((ry - 7) * sinf(t)), 2, 2, DB_WHITE);
   }
+  gfx->fillRect(cx - rx * 3 / 10, cy - ry + 7, 2, 2, DB_WHITE);
+  for (int a = 25; a < 65; a += 4) {  // 右下的反光
+    float t = a * PI / 180;
+    gfx->drawPixel(cx + (int)lroundf((rx - 6) * cosf(t)), cy + (int)lroundf((ry - 6) * sinf(t)), DB_CYAN);
+  }
+}
+
+// 纸页：浅青 2px 框、深色底、右上折角（ln 行字，颜色 lc）
+void dbPage(int x, int y, int w, int h, uint16_t lc, int ln) {
+  gfx->fillRect(x, y, w, h, DB_CYAN);
+  gfx->fillRect(x + 2, y + 2, w - 4, h - 4, DB_NAVY);
+  for (int k = 0; k < 7; k++) gfx->drawFastHLine(x + w - 7 + k, y + k, 7 - k, DB_AIR);
+  for (int k = 0; k < 7; k++) gfx->fillRect(x + w - 8 + k, y + k, 2, 1, DB_CYAN);
+  gfx->fillRect(x + w - 8, y, 2, 8, DB_CYAN);
+  gfx->fillRect(x + w - 8, y + 6, 8, 2, DB_CYAN);
+  for (int i = 0; i < ln; i++) gfx->fillRect(x + 5, y + 8 + i * 6, (w - 12) - (i % 2) * 7 - (i == 0 ? 5 : 0), 2, lc);
+}
+
+void dbTerminal(int cx, int cy, uint32_t t) {
+  int x = cx - 21, y = cy - 16, w = 42, h = 32;
+  gfx->fillRect(x + 1, y, w - 2, h, DB_CYAN);
+  gfx->fillRect(x, y + 1, w, h - 2, DB_CYAN);
+  gfx->fillRect(x + 2, y + 2, w - 4, h - 4, DB_NAVY);
+  gfx->fillRect(x + 2, y + 2, w - 4, 5, DB_BLUE);  // 标题栏 + 三个小圆点
+  for (int i = 0; i < 3; i++) gfx->fillRect(x + 5 + i * 4, y + 3, 2, 2, i ? DB_CYAN : DB_WHITE);
+  int px = x + 7, py = y + 13;
+  for (int k = 0; k < 5; k++) {  // ">"
+    gfx->fillRect(px + k, py + k, 2, 2, DB_WHITE);
+    gfx->fillRect(px + k, py + 8 - k, 2, 2, DB_WHITE);
+  }
+  if ((t / 400) % 2) gfx->fillRect(px + 9, py + 8, 8, 2, DB_CYAN);
+}
+
+void dbEdit(int cx, int cy, uint32_t t) {
+  int x = cx - 17, y = cy - 18, n = (t / 260) % 5 + 1;
+  dbPage(x, y, 28, 36, DB_WHITE, n);
+  int ly = y + 8 + (n - 1) * 6, lw = 16 - ((n - 1) % 2) * 7 - (n == 1 ? 5 : 0);
+  int tx = x + 5 + lw + 1, ty = ly + 1;  // 铅笔跟着正在写的那一行
+  for (int k = 0; k < 9; k++) gfx->fillRect(tx + 2 + k, ty - 2 - k, 3, 3, DB_BLUE);
+  gfx->fillRect(tx + 10, ty - 11, 3, 3, DB_CYAN);
+  gfx->fillRect(tx, ty - 1, 2, 2, DB_WHITE);
+  gfx->fillRect(tx + 1, ty - 2, 2, 2, mix565(DB_WHITE, DB_BLUE, 120));
+}
+
+void dbSearch(int cx, int cy, uint32_t t) {
+  dbPage(cx - 18, cy - 18, 28, 36, DB_RIMLO, 5);
+  int mx = cx + 2 + (int)lroundf(7 * sinf(t / 320.0f)), my = cy - 2;  // 放大镜扫过纸面
+  gfx->fillCircle(mx, my, 8, mix565(DB_NAVY, DB_CYAN, 60));
+  gfx->drawCircle(mx, my, 9, DB_WHITE);
+  gfx->drawCircle(mx, my, 8, DB_WHITE);
+  gfx->fillRect(mx - 4, my - 5, 2, 3, DB_WHITE);
+  for (int k = 0; k < 4; k++) gfx->fillRect(mx + 6 + k * 2, my + 6 + k * 2, 3, 3, DB_BLUE);
+}
+
+void dbGlobe(int cx, int cy, uint32_t t) {
+  const int r = 16;
+  const uint16_t mid = mix565(DB_BLUE, DB_CYAN, 140);
+  gfx->fillCircle(cx, cy, r, DB_BLUED);
+  gfx->fillCircle(cx - 1, cy - 1, r - 2, DB_BLUE);
+  float ph = t / 600.0f;
+  for (int k = -1; k <= 1; k++) {  // 转动的经线
+    float e = sinf(ph + k * 1.05f);
+    int ew = (int)(r * fabsf(e));
+    for (int yy = -r + 1; yy < r; yy++) {
+      float hw = sqrtf(max(0.0f, 1 - (yy / (float)r) * (yy / (float)r)));
+      gfx->drawPixel(cx + (int)lroundf(ew * hw) * (e >= 0 ? 1 : -1), cy + yy, k ? mid : DB_CYAN);
+    }
+  }
+  for (int yy = -8; yy <= 8; yy += 8) {  // 纬线
+    int hw = (int)lroundf(sqrtf(r * r - yy * yy)) - 1;
+    gfx->drawFastHLine(cx - hw, cy + yy, 2 * hw + 1, yy ? mid : DB_CYAN);
+  }
+  gfx->drawCircle(cx, cy, r, DB_CYAN);
+  gfx->fillRect(cx - 9, cy - 11, 3, 2, DB_WHITE);
+  gfx->fillRect(cx - 11, cy - 9, 2, 3, DB_WHITE);
+}
+
+// 小鲸鱼（10×6，朝左），s 倍放大
+void dbWhale(int x, int y, int s, uint16_t c) {
+  static const char *W[6] = {".......T.T", "..BBBB..T.", ".BBBBBBBB.", "BEBBBBBB..", "BWWWWBB...", ".WWWW....."};
+  for (int r = 0; r < 6; r++)
+    for (int k = 0; k < 10; k++) {
+      char ch = W[r][k];
+      if (ch == '.') continue;
+      gfx->fillRect(x + k * s, y + r * s, s, s, ch == 'W' ? DB_WHITE : (ch == 'E' ? DB_NAVY : c));
+    }
+}
+
+void dbAgents(int cx, int cy, uint32_t t) {  // 一条大鲸鱼领着两条小鲸鱼往前游（主智能体 + 子智能体）
+  int b[3];
+  for (int i = 0; i < 3; i++) b[i] = ((t / 240 + i) % 3) == 0 ? 2 : 0;
+  dbWhale(cx - 29, cy - 8 - b[0], 3, DB_BLUE);
+  dbWhale(cx + 5, cy - 14 - b[1], 2, DB_CYAN);
+  dbWhale(cx + 9, cy + 2 - b[2], 2, DB_CYAN);
+  if ((t / 330) % 2) {
+    gfx->fillRect(cx - 20, cy - 14, 2, 2, DB_CYAN);
+    gfx->fillRect(cx - 23, cy - 17, 2, 2, DB_CYAN);
+    gfx->fillRect(cx - 17, cy - 17, 2, 2, DB_CYAN);
+  }
+}
+
+void dbGear(int cx, int cy, uint32_t t) {
+  float a0 = t / 700.0f;
+  for (int i = 0; i < 8; i++) {
+    float a = a0 + i * PI / 4;
+    gfx->fillRect(cx + (int)lroundf(13 * cosf(a)) - 3, cy + (int)lroundf(13 * sinf(a)) - 3, 6, 6, DB_CYAN);
+  }
+  gfx->fillCircle(cx, cy, 12, DB_CYAN);
+  gfx->fillCircle(cx, cy, 5, DB_NAVY);
+  gfx->fillRect(cx - 6, cy - 9, 3, 2, DB_WHITE);
+}
+
+void dbQuestion(int cx, int cy, uint32_t t) {
+  static const char *Q[8] = {".XXXX.", "XX..XX", "....XX", "...XX.", "..XX..", "..XX..", "......", "..XX.."};
+  const int s = 4, x0 = cx - 12, y0 = cy - 16;
+  uint16_t col = (t / 400) % 2 ? DB_WHITE : DB_CYAN;
+  for (int p = 0; p < 2; p++)  // 先画蓝色投影，再画问号
+    for (int r = 0; r < 8; r++)
+      for (int k = 0; k < 6; k++)
+        if (Q[r][k] == 'X') gfx->fillRect(x0 + k * s + (p ? 0 : 2), y0 + r * s + (p ? 0 : 2), s, s, p ? col : DB_BLUED);
+}
+
+void dbToolIcon(int cx, int cy, uint32_t t, const String &tool) {
+  if (toolIsTerminal(tool)) dbTerminal(cx, cy, t);
+  else if (tool == "Edit" || tool == "Write" || tool == "MultiEdit" || tool == "NotebookEdit") dbEdit(cx, cy, t);
+  else if (tool == "Read" || tool == "Grep" || tool == "Glob" || tool == "LS") dbSearch(cx, cy, t);
+  else if (tool == "WebFetch" || tool == "WebSearch") dbGlobe(cx, cy, t);
+  else if (tool == "Agent" || tool == "Task") dbAgents(cx, cy, t);
+  else dbGear(cx, cy, t);
 }
 
 // 干活 / 等你确认时：气泡浮在水面右边，一下下弹起来再落回水面（落水时压扁一点、荡开涟漪）。
@@ -373,13 +512,8 @@ void dsStateBubble(int x, int w, int wy, uint32_t now) {
   int rx = r + (int)(3 * sq), ry = r - (int)(3 * sq);
   int cy = wy - r * 4 / 9 - (int)(7 * hop) + (int)(2 * sq);
   dsAirBubble(cx, cy, rx, ry, wy);
-  int iy = cy - 4;  // 图标往上一点，大部分在水面以上
-  if (dsMode == M_WORKING && toolIsTerminal(dsTool)) {  // 终端：原图标 56×40 的方框角会伸出圆泡，画小一号
-    gfx->fillRoundRect(cx - 22, iy - 15, 44, 30, 4, C_BLACK);
-    pxText(">", cx - 16, iy + 7, C_GREEN, 2);
-    if ((now / 400) % 2) gfx->fillRect(cx - 4, iy + 4, 8, 3, C_GREEN);
-  } else if (dsMode == M_WORKING) drawToolIcon(cx - 26, iy - 22, now, dsTool);
-  else pxText("?", cx - pxW("?", 4) / 2, iy + 20, (now / 400) % 2 ? C_DS : C_DS_HI, 4);
+  if (dsMode == M_WORKING) dbToolIcon(cx, cy - 4, now, dsTool);
+  else dbQuestion(cx, cy - 4, now);
   if (cy + ry > wy) {  // 水线横穿气泡
     int half = (int)(rx * sqrtf(max(0.0f, 1 - powf((wy - cy) / (float)ry, 2))));
     gfx->drawFastHLine(cx - half, wy, half * 2 + 1, C_DS_WATER);
