@@ -231,6 +231,7 @@ void handleLine(const String &line) {
     cxAcct = String(doc["acct"] | "");
     cxAcctAuto = (doc["auto"] | 1) == 1;
     cxAcctN = doc["n"] | 0;
+    cxSwitchAt = 0;
   } else if (!strcmp(t, "gamma")) {
     float g = doc["g"] | 1.0f;
     panelGamma = constrain(g, 0.5f, 3.0f);
@@ -746,7 +747,10 @@ void onTap(int x, int y, uint32_t now) {
   } else if (screen == SCR_BUDDY) {
     if (x < 50 && y < 46) setScreen(SCR_HOME);  // home 按钮：触控区比画出来的大一圈
     else if (y < 42 && x >= BS_X && x < BS_X + 3 * BS_W) buddyAgent = (x - BS_X) / BS_W;  // 标题栏：Claude / Codex / DeepSeek 切换
-    else if (buddyAgent == 1 && x >= 252 && y >= QC_Y1 + 44 && y < QC_Y2 && cxAcctN > 1) Host.println("CXACC");  // 点 Codex 5 小时卡底行的账号名：换账号（自动 → 账号 1 → 账号 2 → 自动）
+    else if (buddyAgent == 1 && x >= 252 && y >= QC_Y1 + 34 && y < QC_Y2 && cxAcctN > 1) {  // 点 Codex 5 小时卡下半部分（进度条和账号名）：换账号（自动 → 账号 1 → 账号 2 → 自动）
+      Host.println("CXACC");
+      cxSwitchAt = now;
+    }
     else if (x >= 252 && y >= QC_Y1) {  // 点额度卡（DeepSeek 是余额卡）：让 magpie 立刻重新读额度，不用等它自己的轮询
       if (!qRefreshing(buddyAgent) && (!qRefAt || now - qRefAt > 3000)) {
         static const char *const QREF_AG[3] = {"claude", "codex", "deepseek"};

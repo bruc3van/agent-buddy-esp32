@@ -1496,16 +1496,21 @@ def build_quotas():
                        resets.get("5h", 0), resets.get("7d", 0)))
     with lock:
         codex_cards[:] = cx
-        if cx:  # 旧版本按显示名记的选择也认
-            pick = next((i for i, c in enumerate(cx) if codex_pick in (c[0], c[1])), -1) if codex_pick else -1
-            k = pick if pick >= 0 else min(range(len(cx)), key=lambda i: cx[i][2] if cx[i][2] >= 0 else 101)  # 自动：5 小时剩余最多
-            _, u, h5, d7, h5r, d7r = cx[k]
-            codex_usage.clear()
-            codex_usage.update(h5=h5, d7=d7, h5r=h5r, d7r=d7r, acct=u, auto=int(pick < 0), n=len(cx), _at=build_round)
-        else:  # 读成功但已经没有 Codex 账号：发「暂无数据」覆盖板子上的旧额度（读失败会抛异常，走不到这里）
-            codex_usage.clear()
-            codex_usage.update(h5=-1, d7=-1, acct="", auto=1, n=0, _at=build_round)
+        apply_codex_pick()
     return {"t": "mq", "g": [groups[k] for k in order]}
+
+
+def apply_codex_pick():
+    """按当前选择（或自动）从已读到的账号里挑一个，写进 codex_usage，pump 会发给板子。调用方持有 lock。"""
+    cx = codex_cards
+    codex_usage.clear()
+    if cx:  # 旧版本按显示名记的选择也认
+        pick = next((i for i, c in enumerate(cx) if codex_pick in (c[0], c[1])), -1) if codex_pick else -1
+        k = pick if pick >= 0 else min(range(len(cx)), key=lambda i: cx[i][2] if cx[i][2] >= 0 else 101)  # 自动：5 小时剩余最多
+        _, u, h5, d7, h5r, d7r = cx[k]
+        codex_usage.update(h5=h5, d7=d7, h5r=h5r, d7r=d7r, acct=u, auto=int(pick < 0), n=len(cx), _at=build_round)
+    else:  # 读成功但已经没有 Codex 账号：发「暂无数据」覆盖板子上的旧额度（读失败会抛异常，走不到这里）
+        codex_usage.update(h5=-1, d7=-1, acct="", auto=1, n=0, _at=build_round)
 
 
 def build_usage(i, period):
@@ -1865,17 +1870,17 @@ def device_line(line, src="usb"):
         with lock:
             ids = [c[0] for c in codex_cards]
             names = {c[0]: c[1] for c in codex_cards}
-        if not ids:
-            return
-        cur = next((c for c in ids if codex_pick in (c, names[c])), None)  # 兼容旧版按显示名记的选择
-        i = ids.index(cur) if cur else -1
-        codex_pick = ids[i + 1] if i + 1 < len(ids) else ""  # 自动 → 账号 1 → 账号 2 → 自动
+            if not ids:
+                return
+            cur = next((c for c in ids if codex_pick in (c, names[c])), None)  # 兼容旧版按显示名记的选择
+            i = ids.index(cur) if cur else -1
+            codex_pick = ids[i + 1] if i + 1 < len(ids) else ""  # 自动 → 账号 1 → 账号 2 → 自动
+            apply_codex_pick()  # 账号数据都在内存里，当场换好，pump 下一拍（0.2 秒内）就发给板子，不用等 magpie 循环
         try:
             write_atomic(CX_PICK_FILE, codex_pick)
         except OSError:
             pass
         log("Codex 额度账号：", names.get(codex_pick) or "自动")
-        magpie_resend.set()
     elif line.startswith(b"PRES "):
         try:
             pr = json.loads(line[5:])

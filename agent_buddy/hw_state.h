@@ -16,6 +16,7 @@ bool spkMute = false;     // 静音（音量保留）
 int cfgDoneSec = 20;      // 「任务完成」播报门槛（秒），0 = 不播报
 bool cfgMicReact = true;  // Clawd 对声音做反应
 int cfgBright = 100;      // 屏幕亮度 10~100
+uint32_t cxSwitchAt = 0;  // 点了切换 Codex 账号、还没收到 bridge 回的新额度：先显示「切换中」，最多 2 秒
 uint32_t qRefAt = 0;  // 点额度卡要求刷新的时刻（等 bridge 回 qref，最多 15 秒），0 = 没在刷新
 int qRefAg = -1;      // 刷新的是哪个 Agent 的额度：0 Claude / 1 Codex / 2 DeepSeek
 inline bool qRefreshing(int a) { return qRefAt && qRefAg == a && millis() - qRefAt < 15000; }

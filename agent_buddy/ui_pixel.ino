@@ -488,7 +488,12 @@ void quotaCard(int y, const char *name, float used, uint32_t resetAt, const Stri
     String rt = foot.length() ? foot : (l <= 0 || fresh ? String("") : l >= 86400 ? String(l / 86400) + " 天后" : l >= 3600 ? String(l / 3600) + " 小时后" : String(max(1, (int)(l / 60))) + " 分钟后");
     int rw = x + w - 12 - (x + 12 + pxW(lt, 1) + 10);
     int k = rt.lastIndexOf(" · ");
-    if (pxW(rt, 1) > rw && k > 0) rt = rt.substring(0, k);  // 放不下先整段丢掉「· 自动」，再不行才截断
+    if (pxW(rt, 1) > rw && k > 0) {  // 放不下：先去掉邮箱域名，再截断账号，「· 自动 / 手选」一直留着（切换时要靠它看出变了）
+      String who = rt.substring(0, k), suf = rt.substring(k);
+      int at = who.indexOf('@');
+      if (at > 0) who = who.substring(0, at);
+      rt = fitPx(who, rw - pxW(suf, 1)) + suf;
+    }
     rt = fitPx(rt, rw);
     pxText(rt, x + w - 12 - pxW(rt, 1), fy, P_DIM, 1);
   } else if (resetAt && nowE) {  // 过了重置时间 10 分钟还没收到新数据：上面的百分比是旧的
@@ -561,6 +566,7 @@ void drawAgentPanel(int a, uint32_t now) {
   // 额度卡
   String suf = cxAcctN > 1 ? (cxAcctAuto ? String(" · 自动") : String(" · 手选")) : String("");
   String acct = a && cxAcct.length() ? maskAcct(cxAcct) + suf : String("");
+  if (a && cxSwitchAt && now - cxSwitchAt < 2000) acct = "切换中";  // 点下去马上有反应，不用等 bridge 回话
   bool rf = qRefreshing(a);  // 点了额度卡、在等 magpie 重新读：标题换成「正在刷新」
   quotaCard(QC_Y1, rf ? "正在刷新" : "5 小时额度剩余", a ? cxH5Used : h5Used, a ? cxH5Reset : h5Reset, acct);
   quotaCard(QC_Y2, rf ? "正在刷新" : "7 天额度剩余", a ? cxD7Used : d7Used, a ? cxD7Reset : d7Reset);
