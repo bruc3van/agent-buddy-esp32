@@ -41,6 +41,17 @@ Captured directly from the board (480×272, scaled 2×).
 
 ## Photos
 
+The finished device in its 3D-printed case.
+
+<p align="center"><img src="docs/images/photo-angle-home.jpg" alt="Agent Buddy in its black case, seen from the front left, showing the desk scene" width="640"></p>
+
+| | |
+|:---:|:---:|
+| <img src="docs/images/photo-front-home.jpg" width="420"><br>Desk scene | <img src="docs/images/photo-front-standby.jpg" width="420"><br>Standby clock |
+| <img src="docs/images/photo-front-claude.jpg" width="420"><br>Claude Code page: resting, with 5-hour / 7-day quota | <img src="docs/images/photo-front-codex.jpg" width="420"><br>Codex page: standing by, with the account masked |
+
+Hardware and early photos:
+
 | | | |
 |:---:|:---:|:---:|
 | <img src="docs/images/photo-screen.jpg" width="280"><br>The magpie Agents page on the real screen (early light theme) | <img src="docs/images/photo-back.jpg" width="280"><br>Back of the board: ESP32-S3 module, external antenna, 2030 speaker on the Speak port | <img src="docs/images/photo-radar.jpg" width="280"><br>HLK-LD2450 mmWave radar and its cable |

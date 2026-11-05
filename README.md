@@ -39,6 +39,17 @@
 
 ## 实拍
 
+装进 3D 打印外壳后的成品。
+
+<p align="center"><img src="docs/images/photo-angle-home.jpg" alt="装进黑色外壳的 Agent Buddy，侧前方视角，屏幕显示桌面首页" width="640"></p>
+
+| | |
+|:---:|:---:|
+| <img src="docs/images/photo-front-home.jpg" width="420"><br>桌面首页 | <img src="docs/images/photo-front-standby.jpg" width="420"><br>待机时钟 |
+| <img src="docs/images/photo-front-claude.jpg" width="420"><br>Claude Code 页：休息中，显示 5 小时 / 7 天额度 | <img src="docs/images/photo-front-codex.jpg" width="420"><br>Codex 页：待命中，账号已打码 |
+
+组装过程和早期照片：
+
 | | | |
 |:---:|:---:|:---:|
 | <img src="docs/images/photo-screen.jpg" width="280"><br>点亮后的 magpie Agent 页（早期浅色界面） | <img src="docs/images/photo-back.jpg" width="280"><br>板子背面：ESP32-S3 模组、外置天线、2030 喇叭接在 Speak 口 | <img src="docs/images/photo-radar.jpg" width="280"><br>HLK-LD2450 毫米波雷达和接线 |

@@ -9,6 +9,8 @@ bridge/state/
 # 录屏输出、出厂固件备份（体积大）
 recordings/
 backup/
+# 实拍原图（体积大，成品图在 docs/images）
+photos-raw/
 
 .DS_Store
 
