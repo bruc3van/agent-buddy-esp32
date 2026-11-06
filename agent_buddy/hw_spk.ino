@@ -42,7 +42,7 @@ void spkLoop(void *) {
       continue;
     }
     spkHeld = false;
-    if (spkDrop || spkMute) {  // 静音立刻生效：缓冲里最多还有 20 秒语音，不能接着念完
+    if (spkDrop || spkMute || spkBatLow) {  // 静音立刻生效：缓冲里最多还有 20 秒语音，不能接着念完
       spkDrop = false;
       rbTail = rbHead;
     }
@@ -67,6 +67,24 @@ void spkEnd() {
   if (!spkReady) return;
   spkI2S.end();
   spkReady = false;
+}
+
+int spkPin(int i) { return i == 0 ? spkBclk : i == 1 ? spkWs : spkDout; }
+
+void spkPinsLow() {
+  for (int i = 0; i < 3; i++) {
+    pinMode(spkPin(i), OUTPUT);
+    digitalWrite(spkPin(i), LOW);
+  }
+}
+
+// 深睡前调用：等播放任务停手再关 I2S，然后把三根脚压低（不回来了，spkHold 不用清）
+void spkShutdown() {
+  spkHeld = false;
+  spkHold = true;
+  for (int i = 0; spkTask && !spkHeld && i < 100; i++) delay(2);
+  spkEnd();
+  spkPinsLow();
 }
 
 bool spkBegin();

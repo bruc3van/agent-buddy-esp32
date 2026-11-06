@@ -36,27 +36,84 @@ const float BAT_CUT_V = 3.30f, BAT_BOOT_V = 3.45f, BAT_RESUME_V = 3.80f;
 const float BAT_USB_V = 4.05f;  // 读数高于这个：插着 USB / 充电头（或电池是满的），不用防掉电重启
 bool batBootPending = false;    // 这次开机记了「没跑满 20 秒」，跑满后清掉
 
+// 功放 NS4168 没有使能脚，板子有电它就在工作，I2S 三根脚一悬空就会把噪声放出来（xiaozhi-esp32 的这块板子也有同样的说明）。
+// 所以深睡前把这三根脚和背光脚都压低并锁住。LRCK（GPIO2）和背光在 RTC 域，锁定会保持到 batBootGuard 决定开机；
+// 41、42 是数字域的脚，醒来后可能回到默认状态，这时靠 LRCK 被压住让功放收不到声道时钟（未实测）。
+// 整块板子断过电时锁定就没了，从上电到 setup 这一小段固件管不到。
+void batHoldPins(bool on) {
+  const int pins[] = {GFX_BL, spkPin(0), spkPin(1), spkPin(2)};
+  for (int pin : pins) {
+    if (on) gpio_hold_en((gpio_num_t)pin);
+    else gpio_hold_dis((gpio_num_t)pin);
+  }
+  if (on) gpio_deep_sleep_hold_en();
+  else gpio_deep_sleep_hold_dis();
+}
+
 void batSleep() {
+  spkShutdown();  // 运行中关机：先停掉播放，免得 DMA 反复播最后一块数据
   pinMode(GFX_BL, OUTPUT);
   digitalWrite(GFX_BL, LOW);
-  gpio_hold_en((gpio_num_t)GFX_BL);  // 深睡时背光脚保持低电平
-  gpio_deep_sleep_hold_en();
+  batHoldPins(true);
   esp_sleep_enable_timer_wakeup(60ULL * 1000000);
   esp_deep_sleep_start();
 }
 
+// 开机时读 5 次取中位数，隔开一点时间，避开升压芯片的纹波和刚上电的抖动
+float batReadStable() {
+  float r[5];
+  for (int i = 0; i < 5; i++) {
+    r[i] = batRead();
+    delay(5);
+  }
+  for (int i = 1; i < 5; i++)
+    for (int j = i; j > 0 && r[j] < r[j - 1]; j--) {
+      float t = r[j];
+      r[j] = r[j - 1];
+      r[j - 1] = t;
+    }
+  return r[2];
+}
+
+// 靠电池时每次上电记一笔（复位原因、电压、是否开机），插回 USB 后从串口打印，用来分辨「滴」声出在哪一步
+const size_t BAT_TRACE_MAX = 120;  // 每条 2 字节，最多 60 条，写满就不再写
+void batTraceAdd(Preferences &p, int reason, float v, bool sleep) {
+  uint8_t buf[BAT_TRACE_MAX];
+  size_t n = p.isKey("btrace") ? p.getBytes("btrace", buf, sizeof(buf)) : 0;
+  if (n + 2 > sizeof(buf)) return;
+  buf[n++] = (uint8_t)(reason & 0x7F) | (sleep ? 0x80 : 0);
+  buf[n++] = (uint8_t)constrain((int)(v * 50), 0, 255);
+  p.putBytes("btrace", buf, n);
+}
+
+void batTraceDump() {
+  if (!prefs.isKey("btrace")) return;
+  uint8_t buf[BAT_TRACE_MAX];
+  size_t n = prefs.getBytes("btrace", buf, sizeof(buf));
+  Host.printf("BATTRACE %u 条（r=复位原因 1上电 3软件 4崩溃 8深睡唤醒 9欠压；S=继续深睡 B=开机）:", (unsigned)(n / 2));
+  for (size_t i = 0; i + 1 < n; i += 2) Host.printf(" r%d/%.2f/%c", buf[i] & 0x7F, buf[i + 1] / 50.0f, buf[i] & 0x80 ? 'S' : 'B');
+  Host.println();
+  prefs.remove("btrace");
+}
+
 // setup 一开始调用，此时屏幕、喇叭、Wi-Fi 都还没上电
 void batBootGuard() {
-  gpio_hold_dis((gpio_num_t)GFX_BL);
+  pinMode(GFX_BL, OUTPUT);  // 断过电时锁定已经没了：先压低，确定要开机才放开
+  digitalWrite(GFX_BL, LOW);
+  spkPinsLow();
   batInit();
-  float v = batRead();
-  if (v <= 2.8f) return;  // 读数不可信（没接电池等），照常开机
+  float v = batReadStable();
   Preferences p;
   p.begin("buddy", false);
   bool low = p.getBool("batlow", false);
   int fails = p.getUChar("batboot", 0);  // 靠电池开机、没跑满 20 秒就断电的次数
-  bool weak = v < BAT_USB_V && (esp_reset_reason() == ESP_RST_BROWNOUT || fails >= 2);
-  if (v < ((low || weak) ? BAT_RESUME_V : BAT_BOOT_V)) {
+  int reason = esp_reset_reason();
+  bool weak = v < BAT_USB_V && (reason == ESP_RST_BROWNOUT || fails >= 2);
+  // 没有掉电记录时，读数 ≤ 2.8V 不可信（没接电池等），照常开机，但照样计入失败次数；
+  // 已经掉过电就不再放行，不然电池彻底没电时读数更低，反而会一直开机、一直响
+  bool sleep = (low || weak) ? v < BAT_RESUME_V : (v > 2.8f && v < BAT_BOOT_V);
+  if (v < BAT_USB_V) batTraceAdd(p, reason, v, sleep);
+  if (sleep) {
     if (!low) p.putBool("batlow", true);
     if (fails) p.remove("batboot");
     if (p.isKey("bsec")) {  // 一轮续航还没记完就扛不住了（运行中掉电重启）：到此为止，记成上次续航
@@ -68,6 +125,7 @@ void batBootGuard() {
     p.end();
     batSleep();
   }
+  batHoldPins(false);  // 确定开机了才放开，I2S 启动前三根脚一直是低电平
   if (low) p.remove("batlow");
   if (v < BAT_USB_V) {
     p.putUChar("batboot", min(fails + 1, 9));
@@ -154,7 +212,9 @@ void batTick(uint32_t now) {
   batUsb = HWCDC::isPlugged();
   batHas = !batUsb && batV > 2.8f && batV < 4.5f;
   batPct = batHas ? batPctOf(batV) : -1;
+  spkBatLow = batHas && batV < BAT_BOOT_V;  // 快没电时不出声：喇叭峰值电流最大，一响就可能把升压拉垮
   batRunTick(now);
+  if (batUsb && now > 20000) batTraceDump();
   if (batHas && batV < BAT_CUT_V && now > 15000) {  // 开机先等平滑稳定，单次纹波不会触发
     batRunFinish(now);
     prefs.putBool("batlow", true);
