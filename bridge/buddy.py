@@ -60,7 +60,7 @@ DETACHED = 0x00000008 | 0x00000200  # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROU
 FQBN = "esp32:esp32:esp32s3:PSRAM=opi,FlashSize=4M,CDCOnBoot=cdc,USBMode=hwcdc,PartitionScheme=huge_app"
 CORE = "esp32:esp32@3.3.12"
 CORE_URL = "https://espressif.github.io/arduino-esp32/package_esp32_index.json"
-LIBS = ["GFX Library for Arduino@1.6.9", "U8g2@2.36.19", "TAMC_GT911@1.0.2", "ArduinoJson@7.4.3"]
+LIBS = ["GFX Library for Arduino@1.6.9", "U8g2@2.36.19", "ArduinoJson@7.4.3"]
 
 CLAUDE_SETTINGS = os.path.expanduser(os.path.join("~", ".claude", "settings.json"))
 CODEX_DIR = os.path.expanduser(os.path.join("~", ".codex"))

@@ -43,6 +43,7 @@ void hwScan() {
   micStop();
   // 1. 板载 I2C（触摸芯片所在，GPIO8 SDA / GPIO4 SCL）
   scanBus(Wire, "板载(SDA8,SCL4)");
+  touchInfo();
 
   // 2. 扩展口：开内部下拉后读电平，高电平说明外面有上拉电阻（I2C 模块常见）或被器件拉高
   struct Port { const char *name; int pins[4]; int n; };

@@ -10,7 +10,7 @@
 #include <U8g2lib.h>  // 必须在 Arduino_GFX 之前包含，才会启用 U8g2 中文字体
 #include <Arduino_GFX_Library.h>
 #include <ArduinoJson.h>
-#include <TAMC_GT911.h>
+#include <Wire.h>
 #include "QspiFast.h"
 #include "fast_canvas.h"  // 快速刷屏：双缓冲异步 DMA + 发送时校色
 #include <Preferences.h>
@@ -31,7 +31,6 @@ Arduino_Canvas *gfx = new FastCanvas(480, 272, lcd);  // 整帧画在 PSRAM 里�
 bool panelInv = true;      // 屏幕校准：反色（见 fixPanel）
 uint8_t panelRot = 2;      // 屏幕校准：扫描方向
 
-TAMC_GT911 tp(8 /* SDA */, 4 /* SCL */, 3 /* INT */, 38 /* RST */, 480, 272);
 
 // ---------- 颜色 ----------
 #define C_BG      0x10A2  // 深灰背景
@@ -819,10 +818,11 @@ void drawPageDots(uint32_t now) {
   }
 }
 
+
 void pollTouch(uint32_t now) {
-  tp.read();
-  bool down = tp.isTouched && tp.touches > 0;
-  int x = down ? tp.points[0].x : 0, y = down ? tp.points[0].y : 0;
+  bool down = false;
+  int x = 0, y = 0;
+  if (!touchRead(now, down, x, y)) return;  // 没有新数据：手指状态不变
   if (down && !tDown) {
     tDown = true;
     tDrag = false;
@@ -878,10 +878,7 @@ void setup() {
   ledcAttach(GFX_BL, 5000, 8);
   setBacklight(255);
 
-  Wire.setBufferSize(256);  // GT911 配置块 185 字节，超过默认 128 字节缓冲
-  tp.begin();
-  tp.setRotation(ROTATION_NORMAL);
-  Wire.setClock(400000);
+  touchInit();
 
   prefs.begin("buddy", false);
   panelGamma = prefs.getFloat("gamma", 1.6);

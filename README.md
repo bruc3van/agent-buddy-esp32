@@ -183,7 +183,7 @@ setup.sh / setup.cmd   一键配置入口
 
 - [magpie](https://github.com/yetone/magpie)：面板的数据来源和界面原型。
 - Clawd 和 Codex 的形象参照 Anthropic 和 OpenAI 的官方角色，小鲸鱼参照 DeepSeek 的 logo，品牌图标归各自所有者。
-- 固件用到 [Arduino_GFX](https://github.com/moononournation/Arduino_GFX)、[U8g2](https://github.com/olikraus/u8g2)、[TAMC_GT911](https://github.com/TAMCTec/gt911-arduino)、[ArduinoJson](https://github.com/bblanchon/ArduinoJson)。
+- 固件用到 [Arduino_GFX](https://github.com/moononournation/Arduino_GFX)、[U8g2](https://github.com/olikraus/u8g2)、[ArduinoJson](https://github.com/bblanchon/ArduinoJson)。
 
 ## 协议
 

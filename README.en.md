@@ -185,7 +185,7 @@ setup.sh / setup.cmd   one-command setup
 
 - [magpie](https://github.com/yetone/magpie): the data source and design reference for the panel.
 - Clawd and the Codex pet are modelled on Anthropic's and OpenAI's official characters, and the whale on DeepSeek's logo; brand icons belong to their owners.
-- The firmware uses [Arduino_GFX](https://github.com/moononournation/Arduino_GFX), [U8g2](https://github.com/olikraus/u8g2), [TAMC_GT911](https://github.com/TAMCTec/gt911-arduino) and [ArduinoJson](https://github.com/bblanchon/ArduinoJson).
+- The firmware uses [Arduino_GFX](https://github.com/moononournation/Arduino_GFX), [U8g2](https://github.com/olikraus/u8g2) and [ArduinoJson](https://github.com/bblanchon/ArduinoJson).
 
 ## License
 
