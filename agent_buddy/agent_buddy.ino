@@ -262,6 +262,8 @@ void handleLine(const String &line) {
     if (doc["rcol"].is<int>()) routeS = (int)doc["rcol"] ? ROUTE_FOLD : 0;  // 调试：路由舞台收起 / 展开
     if (doc["perf"].is<int>()) perfOn = (int)doc["perf"] == 1;  // 调试：性能计时
     if (doc["scan"].is<int>()) hwScan();
+    if ((doc["poweroff"] | 0) == 1) powerOff();  // 调试：关机（同 设置 → 关机）
+    if (doc["offask"].is<int>()) offAsk = (int)doc["offask"] == 1;  // 截图：打开 / 关上关机确认框
     if (doc["radar"].is<int>()) radarLog = (int)doc["radar"] == 1;  // 雷达调试：串口报目标
     if (doc["rmode"].is<int>()) radarMultiTarget();
     if (doc["seatcal"].is<int>()) { if ((int)doc["seatcal"]) seatCalibStart(); else seatCalibClear(); }  // 标定 / 清除座位  // 重新设成多目标模式并查询

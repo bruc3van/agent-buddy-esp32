@@ -67,6 +67,16 @@ void touchInit() {
   Wire.setClock(400000);
 }
 
+// 关机前调用：INT 压低后写 0x8040 = 5 进休眠（约几十 uA）。INT 脚在深睡时由 batHoldPins 锁成低电平；
+// 开机时 touchInit 拉 RST 复位芯片，自然就醒了
+void touchSleep() {
+  pinMode(GT_INT, OUTPUT);
+  digitalWrite(GT_INT, LOW);
+  delay(2);
+  uint8_t cmd = 5;
+  gtWrite(0x8040, &cmd, 1);
+}
+
 // 有新状态时返回 true；没有新数据返回 false，调用方保持上一次的状态
 bool touchRead(uint32_t now, bool &down, int &x, int &y) {
   static bool held = false;

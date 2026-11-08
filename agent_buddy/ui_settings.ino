@@ -12,7 +12,8 @@ enum {
   H_NONE, H_HOME, H_SEC0,  // H_SEC0..+3：分区
   H_VOL = 10, H_MUTE, H_SFX, H_VOICE, H_DSEC0, H_MREACT = 20, H_MMUTE, H_GREET, H_RSEAT, H_PRIV, H_ROPEN,
   H_SLEEP0 = 26,  // 26~29：熄屏时长
-  H_BRIGHT = 30, H_NIGHT = 32, H_ACCT = 33, H_DIAG = 34, H_CLOCK = 36, H_MICPAUSE, H_SEATCAL, H_SEATCLR,  // id 都要小于 H_WSCAN
+  H_BRIGHT = 30, H_NIGHT = 32, H_ACCT = 33, H_DIAG = 34, H_POWEROFF = 35, H_CLOCK = 36, H_MICPAUSE, H_SEATCAL, H_SEATCLR,  // id 都要小于 H_WSCAN
+  H_OFFNO = 200, H_OFFYES,  // 关机确认框（命中表最后登记，盖住下面所有控件）
   H_WSCAN = 40, H_WFORGET, H_WNET = 50,  // H_WNET + i：第 i 个网络
   H_PCADD = 100, H_PCALLOW, H_PCDENY, H_PCPREF, H_PCDEL, H_PC0 = 110,  // 电脑：H_PC0 + i 是第 i 台
 };
@@ -524,6 +525,48 @@ void drawSidebar() {
     pxText(SEC_NAME[i], 40, y + 21, on ? P_BG : P_TEXT, 1);
     setHit(0, y - 1, SET_SB, 34, H_SEC0 + i);
   }
+  // 关机：放在分区栏最下面，和分区隔开一条点线；点了先弹确认框
+  for (int x = 10; x < SET_SB - 10; x += 4) gfx->fillRect(x, 224, 2, 2, P_GRID);
+  int py = 232;
+  if (offAsk) pxPanel(6, py, SET_SB - 12, 32, P_RED, P_RED, false);
+  drawPowerGlyph(14, py + 8, offAsk ? P_BG : P_RED);
+  pxText("关机", 40, py + 21, offAsk ? P_BG : P_RED, 1);
+  setHit(0, py - 4, SET_SB, 40, H_POWEROFF);
+}
+
+// 电源图标：8×8 格、每格 2px（同分区图标）
+void drawPowerGlyph(int x, int y, uint16_t c) {
+  static const char *g[8] = {"...11...", ".1.11.1.", "1..11..1", "1..11..1", "1......1", "1......1", ".1....1.", "..1111.."};
+  for (int r = 0; r < 8; r++)
+    for (int k = 0; k < 8; k++)
+      if (g[r][k] == '1') gfx->fillRect(x + k * 2, y + r * 2, 2, 2, c);
+}
+
+// 关机确认框：盖在设置页中间，点框外 = 取消
+void drawPowerOffAsk() {
+  setHitN = 0;  // 只留确认框的命中区，下面的控件点不到
+  setHit(0, 0, 480, 272, H_OFFNO);
+  // 背景压暗到约 37%：直接改画布里每个像素（RGB565 三个分量各自右移，两个像素一起算），文字只是变暗，不会被打散
+  uint16_t *fb = gfx->getFramebuffer();
+  if (fb) {
+    uint32_t *q = (uint32_t *)fb;
+    for (int i = 0; i < 480 * 272 / 2; i++) {
+      uint32_t c = q[i];
+      q[i] = ((c >> 2) & 0x39E739E7) + ((c >> 3) & 0x18E318E3);
+    }
+  }
+  const int w = 300, h = 150, x = (480 - w) / 2, y = (272 - h) / 2;
+  pxPanel(x, y, w, h, P_PANEL, P_EDGE, true);
+  drawPowerGlyph(x + 20, y + 20, P_RED);
+  pxU("关机", x + 46, y + 35, P_TEXT);
+  pxText(batUsb ? "插着 USB：拔掉再插上才会开机" : "插上 USB 自动开机", x + 20, y + 66, P_TEXT, 1);
+  pxText("也可以按板子背面的 RST 键", x + 20, y + 88, P_DIM, 1);
+  const int bw = 120, by = y + h - 44;
+  pxButton("取消", x + 20, by, bw, false, H_OFFNO);
+  pxPanel(x + w - 20 - bw, by, bw, 30, P_RED, P_RED, true);
+  pxText("关机", x + w - 20 - bw + (bw - pxW("关机", 1)) / 2, by + 20, P_BG, 1);
+  setHit(x + w - 20 - bw, by - 4, bw, 38, H_OFFYES);
+  setHit(x, y, w, h - 48, H_NONE);  // 点框里空白处不取消
 }
 
 // 齿轮（首页状态栏，16×16）
@@ -568,6 +611,7 @@ void drawSettings(uint32_t now) {
   pxU(SEC_NAME[setSec], SET_PX + 2, 28, P_TEXT);
   for (int x = SET_SB + 4; x < 480; x += 4) gfx->fillRect(x, SET_TOP - 2, 2, 2, P_GRID);
   drawSidebar();
+  if (offAsk) drawPowerOffAsk();
 }
 
 // 调试 / 截图：{"t":"ui","sy":120} 把当前分区滚到 120px，{"t":"ui","diag":1} 展开诊断
@@ -613,7 +657,11 @@ void settingsUp() {
 
 void settingsTap(int x, int y) {
   int id = setHitAt(x, y);
-  if (id == H_HOME) {
+  if (id == H_OFFNO || id == H_OFFYES) {  // 确认框的编号比 H_WSCAN 大，要排在 Wi-Fi 那条分支前面
+    offAsk = false;
+    if (id == H_OFFYES) powerOff();
+  } else if (id == H_HOME) {
+    offAsk = false;
     setScreen(SCR_HOME);
   } else if (id >= H_SEC0 && id < H_SEC0 + 6) {
     setSec = id - H_SEC0;
@@ -678,6 +726,9 @@ void settingsTap(int x, int y) {
     settingsSave();
   } else if (id == H_DIAG) {
     setDiagOpen = !setDiagOpen;
+  } else if (id == H_POWEROFF) {
+    offAsk = true;
+
   } else if (id == H_CLOCK) {
     cfgClock = !cfgClock;
     settingsSave();

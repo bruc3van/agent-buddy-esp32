@@ -13,6 +13,7 @@ volatile uint32_t micOnsets[8] = {0};  // 最近 8 个节拍点的时间
 bool cfgSfx = true;       // 提示音
 bool cfgVoice = false;    // 语音播报（默认关：只响提示音 + 屏幕文字）
 bool spkMute = false;     // 静音（音量保留）
+bool offAsk = false;  // 设置页的关机确认框开着（ui_settings.ino）
 volatile bool spkBatLow = false;  // 电池快没电：不出声，只在 hw_bat.ino 里设置
 int cfgDoneSec = 20;      // 「任务完成」播报门槛（秒），0 = 不播报
 bool cfgMicReact = true;  // Clawd 对声音做反应
