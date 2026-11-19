@@ -792,14 +792,17 @@ DSH_DESKTOP_CLI = (os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", 
                    if IS_WIN else "/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh")
 
 
-DSH_ALT_APP = "/Applications/DSH Desktop.app"   # 第三方桌面版：同样用 ~/.dsh/profiles/desktop，内核是它自己打包的 dsh
+# 第三方桌面版 DSH Desktop：跑的是 web profile，内核是它自己打包的 dsh
+DSH_ALT_APP = ("/Applications/DSH Desktop.app" if not IS_WIN
+               else os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "DSH Desktop"))
+DSH_ALT_RUNTIME = (os.path.join(DSH_ALT_APP, "resources", "dsh-runtime") if IS_WIN  # Windows 安装目录/resources
+                   else os.path.join(DSH_ALT_APP, "Contents", "Resources", "dsh-runtime"))
 
 
 def dsh_alt_version():
     """装了 DSH Desktop 时返回它打包的 dsh 内核版本；没装返回 None。它和官方桌面版可以同时装、同时开，各管各的 profile。"""
     try:
-        with open(os.path.join(DSH_ALT_APP, "Contents", "Resources", "dsh-runtime", "node_modules", "@deepseek-ai", "dsh",
-                               "package.json"), encoding="utf-8") as f:
+        with open(os.path.join(DSH_ALT_RUNTIME, "node_modules", "@deepseek-ai", "dsh", "package.json"), encoding="utf-8") as f:
             return json.load(f).get("version")
     except (OSError, ValueError, AttributeError):
         return None
@@ -822,9 +825,11 @@ def dsh_alt_installed():
 
 
 def dsh_alt_hooks(on):
-    """DSH Desktop：web profile 由它独占管理，命令行装不了插件、也只肯装声明了 dsh.bundle 的组合包，
-    改 profile 的 cordis.patch.yml 也会被它重写掉。所以生成一个本地组合包（依赖两个 hooks 插件 + 挂插件的 patch），
-    在 DSH Desktop 的插件管理里从本地路径装一次；它自己管理这个组合包，重写配置也不会丢。"""
+    """DSH Desktop：web profile 由它独占管理，命令行装不了插件、也只肯装声明了 dsh.bundle 的组合包。
+    生成一个本地组合包（依赖两个 hooks 插件），在 DSH Desktop 的插件管理里从本地路径装一次。
+    macOS 版会重写 profile 的 cordis.patch.yml，所以插件行放在组合包自己的 patch 里；
+    Windows 版的 patch 是我们自己的层，插件行照常写进 profile 的 patch（组合包只负责带包），这样
+    `buddy status` 和 `buddy hooks on` 都按 profile patch 识别，不会和组合包里的行重复。"""
     hooks = {"hooks": {ev: [{"hooks": [{"type": "command", "command": dsh_hook_cmd(), "timeout": 5}]}] for ev in DSH_EVENTS}}
     want = json.dumps(hooks, indent=2, ensure_ascii=False) + "\n"
     have, plug = dsh_alt_installed()
@@ -841,7 +846,7 @@ def dsh_alt_hooks(on):
            "dependencies": {DSH_PLUGIN: ver, DSH_PROTOCOL: ver}}  # 插件依赖的 dsh-hook-protocol 是 peerDependency，要显式带上同版本
     blk = dsh_block()
     files = {"package.json": json.dumps(pkg, indent=2, ensure_ascii=False) + "\n",
-             "cordis.patch.yml": blk[blk.index("- insert:"):blk.rindex(DSH_MARK)]}
+             "cordis.patch.yml": "[]\n" if IS_WIN else blk[blk.index("- insert:"):blk.rindex(DSH_MARK)]}
     os.makedirs(DSH_BUNDLE_DIR, exist_ok=True)
     for name, text in files.items():
         path = os.path.join(DSH_BUNDLE_DIR, name)
@@ -921,7 +926,7 @@ def dsh_patch_files():
     root = os.path.join(DSH_HOME, "profiles")
     profs = sorted(d for d in (os.listdir(root) if os.path.isdir(root) else [])
                    if os.path.exists(os.path.join(root, d, "package.json"))
-                   and not (dsh_alt_version() and os.path.join(root, d) == DSH_ALT_PROFILE))  # web 归 DSH Desktop，由组合包挂插件
+                   and not (not IS_WIN and dsh_alt_version() and os.path.join(root, d) == DSH_ALT_PROFILE))  # macOS 版 web 由组合包挂插件；Windows 版照常写这一层
     return [os.path.join(root, d, "cordis.patch.yml") for d in profs] or [DSH_PATCH]
 
 
